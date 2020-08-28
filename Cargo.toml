@@ -1,0 +1,42 @@
+[lib]
+proc-macro = true
+
+[package]
+name = "with_locals"
+version = "0.1.0"
+authors = ["Daniel Henry-Mantilla <daniel.henry.mantilla@gmail.com>"]
+edition = "2018"
+
+license = "Zlib OR MIT OR Apache-2.0"
+
+documentation = "https://docs.rs/with_locals"
+repository = "https://github.com/danielhenrymantilla/with_locals.rs"
+homepage = "https://crates.io/crates/with_locals"
+
+readme = "README.md"
+
+description = "TODO!"
+keywords = [
+    "with",
+    "locals",
+    "callback",
+    "closures",
+    "cps",
+]
+categories = [
+    "rust-patterns",
+]
+
+[dependencies]
+proc-macro2 = "1.0.*"
+quote = "1.0.*"
+
+[dependencies.syn]
+version = "1.0.*"
+features = [
+    "fold",
+    "full",
+    "visit",
+    "visit-mut",
+    # "extra-traits",
+]
