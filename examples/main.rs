@@ -1,22 +1,21 @@
 use ::with_locals::with;
+use ::core::fmt::Display;
 
 #[with]
-fn hex (x: u32) -> &'self dyn ::core::fmt::Display
+fn hex (x: u32) -> &'self dyn Display
 {
     &format_args!("{:#x}", x)
 }
 
-trait ToString {
+trait ToStr {
     #[with]
-    fn to_string (self: &'_ Self) -> &'self str
-    {
-        unimplemented!();
-    }
+    fn to_str (self: &'_ Self) -> &'self str
+    ;
 }
 
-impl ToString for u32 {
+impl ToStr for u32 {
     #[with]
-    fn to_string (self: &'_ u32) -> &'self str
+    fn to_str (self: &'_ u32) -> &'self str
     {
         let mut x = *self;
         if x == 0 {
@@ -43,11 +42,11 @@ fn main ()
         #[with]
         let s_hex = hex(66);
         #[with]
-        let s_hex = hex(66);
+        let s_hex: &'_ dyn Display = hex(66);
         drop(s_hex);
         ();
         #[with]
-        let n = ::core::u32::MAX.to_string();
+        let n: &str = ::core::u32::MAX.to_str();
         dbg!(n);
         println!("s_hex = `{}`", s_hex);
         assert_eq!(s_hex.to_string(), "0x42");

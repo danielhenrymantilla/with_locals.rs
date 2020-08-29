@@ -20,27 +20,95 @@ use ::syn::{*,
     visit_mut::VisitMut,
 };
 
-#[cfg(FALSE)]
-macro_rules! parse_quote {(
-    $($input:tt)*
-) => (
-    helper(
-        ::quote::quote!($($input)*).to_string(),
-        || ::syn::parse_quote!( $($input)* ),
-    )
-)}
-#[cfg_attr(debug_assertions, allow(dead_code))]
-fn helper<T : ::syn::parse::Parse> (
-    msg: impl ::core::fmt::Display,
-    it: impl FnOnce() -> T,
-) -> T
-{
-    eprintln!(
-        "Attempting to parse as a {} the following tokens:\n {}",
-        ::core::any::type_name::<T>(),
-        msg,
-    );
-    it()
+enum Fun {
+    ItemFn(ItemFn),
+    TraitItemMethod(TraitItemMethod),
+    ImplItemMethod(ImplItemMethod),
+}
+
+struct FunFields<'fun> {
+    attrs: &'fun mut Vec<Attribute>,
+    vis: Option<&'fun mut Visibility>,
+    sig: &'fun mut Signature,
+    block: Option<&'fun mut Block>,
+}
+
+impl Fun {
+    fn fields (self: &'_ mut Self) -> FunFields<'_>
+    {
+        match *self {
+            | Self::ItemFn(ItemFn {
+                ref mut attrs,
+                ref mut vis,
+                ref mut sig,
+                ref mut block,
+                ..
+            })
+            => FunFields {
+                attrs,
+                vis: Some(vis),
+                sig,
+                block: Some(block),
+            },
+
+            | Self::ImplItemMethod(ImplItemMethod {
+                ref mut attrs,
+                ref mut vis,
+                ref mut sig,
+                ref mut block,
+                ..
+            })
+            => FunFields {
+                attrs,
+                vis: Some(vis),
+                sig,
+                block: Some(block),
+            },
+
+            | Self::TraitItemMethod(TraitItemMethod {
+                ref mut attrs,
+                ref mut sig,
+                default: ref mut block,
+                ..
+            })
+            => FunFields {
+                attrs,
+                vis: None,
+                sig,
+                block: block.as_mut(),
+            },
+        }
+    }
+}
+
+impl ToTokens for Fun {
+    fn to_tokens (self: &'_ Self, out: &'_ mut TokenStream2)
+    {
+        match *self {
+            | Fun::ItemFn(ref inner) => inner.to_tokens(out),
+            | Fun::TraitItemMethod(ref inner) => inner.to_tokens(out),
+            | Fun::ImplItemMethod(ref inner) => inner.to_tokens(out),
+        }
+    }
+}
+
+impl Parse for Fun {
+    fn parse (input: ParseStream<'_>)
+      -> Result<Self>
+    {
+        use ::syn::parse::discouraged::Speculative;
+        let ref fork = input.fork();
+        if let Ok(it) = fork.parse::<TraitItemMethod>() {
+            input.advance_to(fork);
+            return Ok(Self::TraitItemMethod(it));
+        }
+        let ref fork = input.fork();
+        if let Ok(it) = fork.parse::<ImplItemMethod>() {
+            input.advance_to(fork);
+            return Ok(Self::ImplItemMethod(it));
+        }
+        input.parse::<ItemFn>().map(Self::ItemFn)
+    }
 }
 
 #[proc_macro_attribute] pub
@@ -52,18 +120,28 @@ fn with (
     let lifetime: Option<Lifetime> = parse_macro_input!(attrs);
     // dbg!(&lifetime);
 
-    let mut fun: ItemFn = parse_macro_input!(input);
+    let mut fun: Fun = parse_macro_input!(input);
 
     let mut encountered_error = None;
 
-    let mut visitor = Visitor {
+    let mut visitor = ReplaceLetBindingsWithWithCalls {
         encountered_error: &mut encountered_error,
     };
 
     {
         use ::std::panic;
         if let Err(panic) = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-            visitor.visit_item_fn_mut(&mut fun);
+            match fun {
+                | Fun::ItemFn(ref mut it) => {
+                    visitor.visit_item_fn_mut(it);
+                },
+                | Fun::TraitItemMethod(ref mut it) => {
+                    visitor.visit_trait_item_method_mut(it);
+                },
+                | Fun::ImplItemMethod(ref mut it) => {
+                    visitor.visit_impl_item_method_mut(it);
+                },
+            }
         }))
         {
             if let Some(err) = encountered_error {
@@ -74,10 +152,10 @@ fn with (
         }
     }
 
-    struct Visitor<'__> {
+    struct ReplaceLetBindingsWithWithCalls<'__> {
         encountered_error: &'__ mut Option<::syn::Error>,
     }
-    impl VisitMut for Visitor<'_> {
+    impl VisitMut for ReplaceLetBindingsWithWithCalls<'_> {
         fn visit_block_mut (
             self: &'_ mut Self,
             mut block: &'_ mut Block,
@@ -137,11 +215,13 @@ fn with (
                     }
                 ;
                 let binding = let_assign.pat;
-                let init = if let Some(it) = let_assign.init.take() { it } else {
-                    throw!(let_assign.semi_token.span() =>
-                        "Missing expression"
-                    );
-                };
+                let init =
+                    if let Some(it) = let_assign.init.take() { it } else {
+                        throw!(let_assign.semi_token.span() =>
+                            "Missing expression"
+                        );
+                    }
+                ;
                 let mut call = *init.1;
                 block.stmts.push(Stmt::Expr(call));
                 let call = block.stmts.last_mut().map(|stmt| match *stmt {
@@ -182,8 +262,14 @@ fn with (
                                 "`#[with]` does not support attributes"
                             );
                         }
-                        let at_last: &mut Ident = // pun intended
-                            &mut path.path.segments.iter_mut().next_back().unwrap().ident
+                        let at_last /* pun intended */ =
+                            &mut
+                            path.path
+                                .segments
+                                .iter_mut()
+                                .next_back()
+                                .unwrap()
+                                .ident
                         ;
                         (attrs, args, at_last)
                     },
@@ -219,8 +305,9 @@ fn with (
         .into()
 }
 
-fn handle_returning_local (fun: &'_ mut ItemFn)
+fn handle_returning_local (fun: &'_ mut Fun)
 {
+    let fun = fun.fields();
     let ret_ty =
         if let ReturnType::Type(_, ref mut it) = fun.sig.output { it } else {
             // Nothing to do
@@ -257,14 +344,14 @@ fn handle_returning_local (fun: &'_ mut ItemFn)
     // By now, there is at least one `'self` occurence in the return type:
     // transform the whole function into one using the `with_` continuation
     // pattern.
-    let ItemFn {
-        sig: Signature {
+    let FunFields {
+        sig: &mut Signature {
             ref mut ident,
             ref mut inputs,
             ref mut output,
             ref mut generics, .. },
-        ref mut block,
-        .. } = fun
+        block: ref mut block,
+        .. } = {fun}
     ;
     generics.params.push(parse_quote! {
         __Continuation_Return__
@@ -315,13 +402,15 @@ fn handle_returning_local (fun: &'_ mut ItemFn)
             }
         }
     }
-    ReturnMapper.visit_block_mut(block);
-    *block = parse_quote!({
-        macro_rules! ret { ($expr:expr) => (
-            match $expr { ret => {
-                return __continuation__(ret);
-            }}
-        )}
-        ret!(#block)
-    });
+    if let Some(&mut (ref mut block)) = *block {
+        ReturnMapper.visit_block_mut(block);
+        *block = parse_quote!({
+            macro_rules! ret { ($expr:expr) => (
+                match $expr { ret => {
+                    return __continuation__(ret);
+                }}
+            )}
+            ret!(#block)
+        });
+    }
 }
