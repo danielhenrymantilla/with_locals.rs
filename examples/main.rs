@@ -18,19 +18,20 @@ impl ToString for u32 {
     #[with]
     fn to_string (self: &'_ u32) -> &'self str
     {
-        let &(mut x) = self;
-        let mut ret = [b' '; 1 + 3 + 3 + 3]; // u32::MAX ~ 4_000_000_000
-        let mut buf = &mut ret[..];
-        while x > 10 {
-            *buf.last_mut().unwrap() = b'0' + (x % 10) as u8;
-            x /= 10;
-            let len = buf.len();
-            buf = &mut buf[.. len - 1];
+        let mut x = *self;
+        if x == 0 {
+            return "0";
         }
-        *buf.last_mut().unwrap() = b'0' + x as u8;
+        let mut arr = [b'0'; 1 + 3 + 3 + 3]; // u32::MAX ~ 4_000_000_000
+        let mut buf = &mut arr[..];
+        while x > 0 {
+            let (last, buf_) = buf.split_last_mut().unwrap();
+            buf = buf_;
+            *last = b'0' + (x % 10) as u8;
+            x /= 10;
+        }
         let len = buf.len();
-        let buf = &ret[len - 1 ..];
-        return ::core::str::from_utf8(buf).unwrap();
+        return ::core::str::from_utf8(&arr[len ..]).unwrap();
     }
 }
 
