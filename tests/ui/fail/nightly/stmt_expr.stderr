@@ -1,0 +1,15 @@
+error: Missing `#[with]` annotation on the enscoping function
+  --> $DIR/stmt_expr.rs:12:13
+   |
+12 |     let _ = #[with] expr();
+   |             ^^^^^^^
+   |
+   = note: this error originates in an attribute macro (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: Missing `#[with]` annotation on the enscoping function
+ --> $DIR/stmt_expr.rs:6:5
+  |
+6 |     #[with]
+  |     ^^^^^^^
+  |
+  = note: this error originates in an attribute macro (in Nightly builds, run with -Z macro-backtrace for more info)

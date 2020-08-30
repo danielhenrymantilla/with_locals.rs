@@ -1,3 +1,5 @@
+use ::core::ops::Not as _;
+
 use ::proc_macro::{
     TokenStream,
 };
@@ -7,95 +9,36 @@ use ::proc_macro2::{
 };
 use ::quote::{
     format_ident,
-    quote,
-    quote_spanned,
+    // quote,
+    // quote_spanned,
     ToTokens,
 };
 use ::syn::{*,
-    // fold::Fold,
-    parse::{Nothing, Parse, Parser, ParseStream},
-    punctuated::Punctuated,
+    parse::{
+        Nothing,
+        Parse,
+        // Parser,
+        ParseStream,
+    },
+    // punctuated::Punctuated,
     spanned::Spanned,
     Result,
-    visit_mut::VisitMut,
+    visit_mut::{self, VisitMut},
 };
 
-enum Fun {
+enum Input {
     ItemFn(ItemFn),
     TraitItemMethod(TraitItemMethod),
     ImplItemMethod(ImplItemMethod),
 }
 
-struct FunFields<'fun> {
-    attrs: &'fun mut Vec<Attribute>,
-    vis: Option<&'fun mut Visibility>,
-    sig: &'fun mut Signature,
-    block: Option<&'fun mut Block>,
-}
-
-impl Fun {
-    fn fields (self: &'_ mut Self) -> FunFields<'_>
-    {
-        match *self {
-            | Self::ItemFn(ItemFn {
-                ref mut attrs,
-                ref mut vis,
-                ref mut sig,
-                ref mut block,
-                ..
-            })
-            => FunFields {
-                attrs,
-                vis: Some(vis),
-                sig,
-                block: Some(block),
-            },
-
-            | Self::ImplItemMethod(ImplItemMethod {
-                ref mut attrs,
-                ref mut vis,
-                ref mut sig,
-                ref mut block,
-                ..
-            })
-            => FunFields {
-                attrs,
-                vis: Some(vis),
-                sig,
-                block: Some(block),
-            },
-
-            | Self::TraitItemMethod(TraitItemMethod {
-                ref mut attrs,
-                ref mut sig,
-                default: ref mut block,
-                ..
-            })
-            => FunFields {
-                attrs,
-                vis: None,
-                sig,
-                block: block.as_mut(),
-            },
-        }
-    }
-}
-
-impl ToTokens for Fun {
-    fn to_tokens (self: &'_ Self, out: &'_ mut TokenStream2)
-    {
-        match *self {
-            | Fun::ItemFn(ref inner) => inner.to_tokens(out),
-            | Fun::TraitItemMethod(ref inner) => inner.to_tokens(out),
-            | Fun::ImplItemMethod(ref inner) => inner.to_tokens(out),
-        }
-    }
-}
-
-impl Parse for Fun {
+impl Parse for Input {
     fn parse (input: ParseStream<'_>)
       -> Result<Self>
     {
+        // FIXME: this could be optimized, but `syn` does not export its
+        // internal `parse_visibility` helper function.
+        // For the sake of simplicity, use this naive approach for now.
         use ::syn::parse::discouraged::Speculative;
         let ref fork = input.fork();
         if let Ok(it) = fork.parse::<TraitItemMethod>() {
@@ -107,7 +50,83 @@ impl Parse for Fun {
             input.advance_to(fork);
             return Ok(Self::ImplItemMethod(it));
         }
-        input.parse::<ItemFn>().map(Self::ItemFn)
+        let ref fork = input.fork();
+        match fork.parse::<ItemFn>() {
+            | Ok(it) => {
+                input.advance_to(fork);
+                Ok(Self::ItemFn(it))
+            },
+            | Err(err) => {
+                // Here we could directly err with `err`, but in case the
+                // user is annotating a stmt or an expr, which is allowed
+                // as long as the enscoping function is annotated (preprocessor
+                // pattern), a more useful error message than "expected `fn`"
+                // could be generated.
+                // Yes, I do care about nice error messages!
+                const MSG: &str =
+                    "Missing `#[with]` annotation on the enscoping function"
+                ;
+                let span = Span::call_site();
+                let ref fork = input.fork();
+                match fork.parse::<Stmt>() {
+                    | Err(_)
+                    | Ok(Stmt::Item(_)) => {},
+                    | Ok(_) => return Err(Error::new(span, MSG)),
+                }
+                let ref fork = input.fork();
+                match fork.parse::<Expr>() {
+                    | Err(_) => {},
+                    // A `union ...` can be parsed as an Expr !?
+                    | Ok(Expr::Path(ExprPath {
+                        qself: None,
+                        path,
+                        ..
+                    }))
+                        if path.is_ident("union")
+                    => {},
+
+                    | Ok(_) => {
+                        return Err(Error::new(span, MSG));
+                    },
+                }
+                Err(err)
+            }
+        }
+    }
+}
+
+type Str = ::std::borrow::Cow<'static, str>;
+
+struct Attrs {
+    lifetime: Str,
+    continuation: Option<Ident>,
+}
+
+mod kw {
+    ::syn::custom_keyword!(continuation_name);
+}
+
+impl Parse for Attrs {
+    fn parse (input: ParseStream<'_>)
+      -> Result<Self>
+    {
+        let mut ret = Self {
+            lifetime: "self".into(),
+            continuation: None,
+        };
+        if let Some(lt) = input.parse::<Option<Lifetime>>()? {
+            ret.lifetime = lt.ident.to_string().into();
+            if input.parse::<Option<Token![,]>>()?.is_none() {
+                return Ok(ret);
+            }
+        }
+        if input.peek(kw::continuation_name) {
+            input.parse::<kw::continuation_name>().unwrap();
+            input.parse::<Token![=]>()?;
+            ret.continuation.replace(input.parse()?);
+            input.parse::<Option<Token![,]>>()?;
+        }
+        Ok(ret)
     }
 }
 
@@ -117,82 +136,56 @@ fn with (
     input: TokenStream,
 ) -> TokenStream
 {
-    let lifetime: Option<Lifetime> = parse_macro_input!(attrs);
-    // dbg!(&lifetime);
+    let (attrs, mut fun) = (
+        parse_macro_input!(attrs as Attrs),
+        parse_macro_input!(input as Input),
+    );
 
-    let mut fun: Fun = parse_macro_input!(input);
-
-    let mut encountered_error = None;
-
-    let mut visitor = ReplaceLetBindingsWithWithCalls {
-        encountered_error: &mut encountered_error,
-    };
-
-    {
-        use ::std::panic;
-        if let Err(panic) = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-            match fun {
-                | Fun::ItemFn(ref mut it) => {
-                    visitor.visit_item_fn_mut(it);
-                },
-                | Fun::TraitItemMethod(ref mut it) => {
-                    visitor.visit_trait_item_method_mut(it);
-                },
-                | Fun::ImplItemMethod(ref mut it) => {
-                    visitor.visit_impl_item_method_mut(it);
-                },
-            }
-        }))
-        {
-            if let Some(err) = encountered_error {
-                return err.to_compile_error().into();
-            } else {
-                panic::resume_unwind(panic);
-            }
-        }
+    handle_returning_locals(&mut fun, attrs);
+    if let Err(err) = handle_let_bindings(&mut fun) {
+        return err.to_compile_error().into();
     }
 
+    fun .to_token_stream()
+        .into()
+}
+
+fn handle_let_bindings (fun: &'_ mut Input)
+  -> Result<()>
+{Ok({
     struct ReplaceLetBindingsWithWithCalls<'__> {
         encountered_error: &'__ mut Option<::syn::Error>,
     }
     impl VisitMut for ReplaceLetBindingsWithWithCalls<'_> {
         fn visit_block_mut (
             self: &'_ mut Self,
-            mut block: &'_ mut Block,
+            block: &'_ mut Block,
         )
         {
             macro_rules! throw {
-                (
-                    $span:expr => $err_msg:expr $(,)?
-                ) => ({
+                ( $span:expr => $err_msg:expr $(,)? ) => ({
                     self.encountered_error.replace(
                         Error::new($span, $err_msg)
                     );
                     panic!();
                 });
 
-                (
-                    $err_msg:expr $(,)?
-                ) => (
+                ( $err_msg:expr $(,)? ) => (
                     throw! { Span::call_site() => $err_smg }
                 );
             }
+
             let mut with_idx = None;
             for (i, stmt) in (0 ..).zip(&mut block.stmts) {
                 if let Stmt::Local(ref mut let_binding) = *stmt {
                     let mut has_with = false;
                     let_binding.attrs.retain(|attr| {
-                        macro_rules! ATTR_NAME {() => ( "with" )}
-                        if attr.path.is_ident(ATTR_NAME!()) {
+                        if attr.path.is_ident("with") {
                             has_with = true;
-                            if ::syn::parse2::<Nothing>(attr.tokens.clone()).is_err() {
-                                throw!(attr.tokens.span() =>
-                                    concat!(
-                                        "`#[",
-                                        ATTR_NAME!(),
-                                        "]` takes no attributes",
-                                    ),
-                                );
+                            if let Err(err) =
+                                ::syn::parse2::<Nothing>(attr.tokens.clone())
+                            {
+                                panic!(*self.encountered_error = Some(err));
                             }
                             false // remove attr
                         } else {
@@ -223,12 +216,7 @@ fn with (
                     }
                 ;
                 let mut call = *init.1;
-                block.stmts.push(Stmt::Expr(call));
-                let call = block.stmts.last_mut().map(|stmt| match *stmt {
-                    | Stmt::Expr(ref mut it) => it,
-                    | _ => unreachable!(),
-                }).unwrap();
-                let (attrs, args, func) = match *call {
+                let (attrs, args, func) = match call {
                     | Expr::MethodCall(ExprMethodCall {
                         ref mut attrs,
                         ref mut method,
@@ -238,9 +226,14 @@ fn with (
                     })
                     => {
                         if let Some(ref mut turbofish) = turbofish {
-                            throw!(turbofish.span()=>
-                                "Not yet implemented"
-                            );
+                            // ContinuationRet
+                            turbofish.args.push(GenericMethodArgument::Type(
+                                parse_quote![ _ ]
+                            ));
+                            // Continuation
+                            turbofish.args.push(GenericMethodArgument::Type(
+                                parse_quote![ _ ]
+                            ));
                         }
                         (attrs, args, method)
                     },
@@ -254,28 +247,40 @@ fn with (
                         let path = match **func {
                             | Expr::Path(ref mut it) => it,
                             | _ => throw!(func.span() =>
-                                "Expected a single-identifier"
+                                "Expected a function name"
                             ),
                         };
-                        if let Some(extraneous) = path.attrs.first() {
-                            throw!(extraneous.span() =>
-                                "`#[with]` does not support attributes"
-                            );
-                        }
                         let at_last /* pun intended */ =
-                            &mut
                             path.path
                                 .segments
                                 .iter_mut()
                                 .next_back()
                                 .unwrap()
-                                .ident
                         ;
-                        (attrs, args, at_last)
+
+                        // check to see if there is turbofish around
+                        match at_last.arguments {
+                            | PathArguments::AngleBracketed(ref mut turbofish)
+                            => {
+                                // ContinuationRet
+                                turbofish.args.push(GenericArgument::Type(
+                                    parse_quote![ _ ]
+                                ));
+                                // Continuation
+                                turbofish.args.push(GenericArgument::Type(
+                                    parse_quote![ _ ]
+                                ));
+                            },
+
+                            | _
+                            => {},
+                        }
+
+                        (attrs, args, &mut at_last.ident)
                     },
 
                     | ref extraneous => throw!(extraneous.span() =>
-                        "`fname(...)` or `<expr>.fname(...)` expected"
+                        "`function(...)` or `<expr>.method(...)` expected"
                     ),
                 };
 
@@ -295,18 +300,88 @@ fn with (
                         #(#tail)*
                     }
                 });
+
+                block.stmts.push(Stmt::Expr(call));
             }
             block.stmts.iter_mut().for_each(|stmt| self.visit_stmt_mut(stmt));
         }
+
+        /// The following function is not necessary, but it leads to nicer
+        /// error messages if the `#[with]` attribute is misplaced.
+        ///
+        /// Indeed, imagine someone annotating an assignment instead of a
+        /// new `let` binding. In that case, the previous visitor will not
+        /// catch it, thus leaving the attribute as is, which not only makes no
+        /// sense, it can also trigger things such as:
+        ///
+        /// ```text
+        /// error[E0658]: attributes on expressions are experimental
+        /// ```
+        ///
+        /// This visitor will try to catch that, and provide a nicer error
+        /// message.
+        fn visit_attribute_mut (
+            self: &'_ mut Self,
+            attr: &'_ mut Attribute,
+        )
+        {
+            if attr.path.is_ident("with") {
+                panic!(*self.encountered_error = Some(Error::new(
+                    attr.span(),
+                    "`#[with]` must be applied to a `let` binding.",
+                )));
+            }
+            // visit_mut::visit_attribute_mut(self, attr); /* No need */
+        }
+
+        fn visit_item_mut (
+            self: &'_ mut Self,
+            _: &'_ mut Item,
+        )
+        {
+            // Do not recurse into items defined inside the function body.
+        }
     }
 
-    handle_returning_local(&mut fun);
-    fun .to_token_stream()
-        .into()
-}
+    let mut encountered_error = None;
+    let mut visitor = ReplaceLetBindingsWithWithCalls {
+        encountered_error: &mut encountered_error,
+    };
+    use ::std::panic;
+    if let Err(panic) = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+        match *fun {
+            | Input::ItemFn(ref mut it) => {
+                visitor.visit_item_fn_mut(it);
+            },
+            | Input::TraitItemMethod(ref mut it) => {
+                visitor.visit_trait_item_method_mut(it);
+            },
+            | Input::ImplItemMethod(ref mut it) => {
+                visitor.visit_impl_item_method_mut(it);
+            },
+        }
+    }))
+    {
+        if let Some(err) = encountered_error {
+            return Err(err);
+        } else {
+            panic::resume_unwind(panic);
+        }
+    }
+})}
 
-fn handle_returning_local (fun: &'_ mut Fun)
+fn handle_returning_locals (
+    fun: &'_ mut Input,
+    Attrs { lifetime, continuation }: Attrs,
+)
 {
+    let continuation_name =
+        if let Some(ref continuation_name) = continuation {
+            format_ident!("{}", continuation_name)
+        } else {
+            format_ident!("__continuation__")
+        }
+    ;
     let fun = fun.fields();
     let ret_ty =
         if let ReturnType::Type(_, ref mut it) = fun.sig.output { it } else {
@@ -315,24 +390,30 @@ fn handle_returning_local (fun: &'_ mut Fun)
         }
     ;
     let mut lifetimes = vec![]; {
-        struct LifetimeVisitor<'__> /* = */ (
-            &'__ mut Vec<Lifetime>,
-        );
+        struct LifetimeVisitor<'__> {
+            lifetime: &'__ str,
+            lifetimes: &'__ mut Vec<(/*Lifetime*/)>,
+        }
         impl VisitMut for LifetimeVisitor<'_> {
             fn visit_lifetime_mut (
                 self: &'_ mut Self,
                 lifetime: &'_ mut Lifetime,
             )
             {
-                if lifetime.ident == "self" {
-                    // lifetime.ident = format_ident!("__self_{}__", self.0.len());
-                    lifetime.ident = format_ident!("_", span = lifetime.ident.span());
-                    self.0.push(lifetime.clone());
+                if lifetime.ident == self.lifetime {
+                    // lifetime.ident = format_ident!(
+                    //     "__self_{}__", self.lifetimes.len(),
+                    //     span = lifetime.ident.span(),
+                    // );
+                    lifetime.ident =
+                        format_ident!("_", span = lifetime.ident.span())
+                    ;
+                    self.lifetimes.push({ /* lifetime.clone() */ });
                 }
             }
         }
 
-        LifetimeVisitor(&mut lifetimes)
+        LifetimeVisitor { lifetimes: &mut lifetimes, lifetime: &*lifetime }
             .visit_type_mut(ret_ty)
         ;
     }
@@ -344,73 +425,255 @@ fn handle_returning_local (fun: &'_ mut Fun)
     // By now, there is at least one `'self` occurence in the return type:
     // transform the whole function into one using the `with_` continuation
     // pattern.
-    let FunFields {
+    let __ {
+        ref mut attrs,
         sig: &mut Signature {
             ref mut ident,
             ref mut inputs,
             ref mut output,
             ref mut generics, .. },
-        block: ref mut block,
+        ref mut block,
         .. } = {fun}
     ;
+    // Add the <R, F : FnOnce(OutputReferringToLocals) -> R> generic params.
     generics.params.push(parse_quote! {
-        __Continuation_Return__
+        __Continuation_Return__ /* R */
     });
-    let ret = ::core::mem::replace(output, parse_quote! {
-        -> __Continuation_Return__
-    });
-    let ret = match ret {
-        | ReturnType::Type(_, ty) => *ty,
-        | ReturnType::Default => unreachable!(),
-    };
+    let ret =
+        match
+            ::core::mem::replace(output, parse_quote! {
+              -> __Continuation_Return__
+            })
+        {
+            | ReturnType::Type(_, ty) => *ty,
+            | ReturnType::Default => unreachable!(),
+        }
+    ;
     generics.params.push(parse_quote! {
-        __Continuation__
+        __Continuation__ /* F */
         :
-            // for<#(#lifetimes),*>
-            FnOnce(#ret) -> __Continuation_Return__
+        // for<#(#lifetimes),*>
+        ::core::ops::FnOnce(#ret) -> __Continuation_Return__
     });
     inputs.push(parse_quote! {
-        __continuation__ : __Continuation__
+        #continuation_name : __Continuation__
     });
     *ident = format_ident!("with_{}", ident);
-    struct ReturnMapper; impl VisitMut for ReturnMapper {
-        fn visit_expr_mut (
-            self: &'_ mut Self,
-            expr: &'_ mut Expr,
-        )
+    if let Some(&mut ref mut block) = *block {
+        // Only apply `return <expr> -> return cont(<expr>)` magic
+        // if no continuation name has been provided.
+        if continuation.is_none() {
+            // Replace any terminating `expr` with `return <expr>`:
+            #[derive(Default)]
+            struct AddExplicitReturns {
+                done: bool,
+            }
+            impl VisitMut for AddExplicitReturns {
+                fn visit_block_mut (
+                    self: &'_ mut Self,
+                    block: &'_ mut Block,
+                )
+                {
+                    match block.stmts.last_mut() {
+                        | Some(&mut Stmt::Expr(ref mut expr)) => {
+                            self.visit_expr_mut(expr);
+                            if self.done.not() {
+                                *expr = parse_quote! {
+                                    return #expr
+                                };
+                                self.done = true;
+                            }
+                        },
+
+                        | _ => {
+                            // Do nothing (do not recurse):
+                            // the return type cannot be `()`
+                            // and yet the block does not end with an expr, so
+                            // unless the last expr diverges there will be a
+                            // type error anyways.
+                        },
+                    }
+                }
+
+                fn visit_expr_mut (
+                    self: &'_ mut Self,
+                    expr: &'_ mut Expr,
+                )
+                {
+                    match *expr {
+                        | Expr::Block(ExprBlock {
+                            ref mut block,
+                            ..
+                        }) => {
+                            self.visit_block_mut(block);
+                        },
+
+                        | Expr::If(ExprIf {
+                            ref mut then_branch,
+                            else_branch: ref mut mb_else_branch,
+                            ..
+                        }) => {
+                            self.visit_block_mut(then_branch);
+                            self.done = false;
+                            if let Some((_, else_)) = mb_else_branch {
+                                self.visit_expr_mut(else_);
+                            } else {
+                                // Do nothing, the return type cannot be `()`
+                                // and yet the block ends with an else-less
+                                // if block, so there will be a type error
+                                // anyways.
+                            }
+                            self.done = true;
+                        },
+
+                        | Expr::Match(ExprMatch {
+                            ref mut arms,
+                            ..
+                        }) => {
+                            for arm in arms {
+                                let body = &mut arm.body;
+                                self.visit_expr_mut(body);
+                                if self.done.not() {
+                                    // handle the non-braced body arm case.
+                                    *body = parse_quote! {
+                                        return #body
+                                    };
+                                }
+                                self.done = false;
+                            }
+                            self.done = true;
+                        },
+
+                        | _ => {
+                            // Do nothing (do not recurse)
+                        }
+                    }
+                }
+            }
+            AddExplicitReturns::default().visit_block_mut(block);
+
+            // Then map `return <expr>` to `return cont(<expr>)`.
+            struct ReturnMapper; impl VisitMut for ReturnMapper {
+                fn visit_expr_mut (
+                    self: &'_ mut Self,
+                    expr: &'_ mut Expr,
+                )
+                {
+                    match *expr {
+                        | Expr::Async(_)
+                        | Expr::Closure(_)
+                        => {
+                            // Stop visiting
+                            return;
+                        },
+
+                        // `return <expr>` ...
+                        | Expr::Return(ExprReturn {
+                            expr: Some(ref mut expr),
+                            ..
+                        }) => {
+                            self.visit_expr_mut(expr);
+                            // ... becomes `return cont(<expr>)`
+                            *expr = parse_quote! {
+                                __continuation__(#expr)
+                            };
+                        },
+
+                        | _ => visit_mut::visit_expr_mut(self, expr),
+                    }
+                }
+            }
+            ReturnMapper.visit_block_mut(block);
+            attrs.push(parse_quote! {
+                #[allow(unreachable_code, unused_braces)]
+            })
+        }
+        *block = parse_quote!({
+            let mut #continuation_name = {
+                let mut #continuation_name =
+                    ::core::option::Option::Some(#continuation_name)
+                ;
+                move |__ret__: #ret| #continuation_name.take().unwrap()(__ret__)
+            };
+            macro_rules! #continuation_name { ($expr:expr) => (
+                match $expr { __ret__ => {
+                    return #continuation_name(__ret__);
+                }}
+            )}
+            #block
+        });
+    }
+}
+
+use helpers::*;
+mod helpers {
+    use super::*;
+
+    impl ToTokens for Input {
+        fn to_tokens (self: &'_ Self, out: &'_ mut TokenStream2)
         {
-            match *expr {
-                | Expr::Async(_)
-                | Expr::Closure(_)
-                => {
-                    // Stop visiting
-                    return;
-                },
-
-                | Expr::Return(ExprReturn {
-                    ref mut attrs,
-                    expr: Some(ref mut expr),
-                    ..
-                }) => {
-                    self.visit_expr_mut(expr);
-                    *expr = parse_quote! {
-                        __continuation__(#expr)
-                    };
-                },
-
-                | _ => ::syn::visit_mut::visit_expr_mut(self, expr),
+            match *self {
+                | Input::ItemFn(ref inner) => inner.to_tokens(out),
+                | Input::TraitItemMethod(ref inner) => inner.to_tokens(out),
+                | Input::ImplItemMethod(ref inner) => inner.to_tokens(out),
             }
         }
     }
-    if let Some(&mut (ref mut block)) = *block {
-        ReturnMapper.visit_block_mut(block);
-        *block = parse_quote!({
-            macro_rules! ret { ($expr:expr) => (
-                match $expr { ret => {
-                    return __continuation__(ret);
-                }}
-            )}
-            ret!(#block)
-        });
+
+    pub(in super)
+    struct __<'fun> {
+        pub(in super) attrs: &'fun mut Vec<Attribute>,
+        // pub(in super) vis: Option<&'fun mut Visibility>,
+        pub(in super) sig: &'fun mut Signature,
+        pub(in super) block: Option<&'fun mut Block>,
+    }
+
+    impl Input {
+        pub(in super)
+        fn fields (self: &'_ mut Self) -> __<'_>
+        {
+            match *self {
+                | Self::ItemFn(ItemFn {
+                    ref mut attrs,
+                    // ref mut vis,
+                    ref mut sig,
+                    ref mut block,
+                    ..
+                })
+                => __ {
+                    attrs,
+                    // vis: Some(vis),
+                    sig,
+                    block: Some(block),
+                },
+
+                | Self::ImplItemMethod(ImplItemMethod {
+                    ref mut attrs,
+                    // ref mut vis,
+                    ref mut sig,
+                    ref mut block,
+                    ..
+                })
+                => __ {
+                    attrs,
+                    // vis: Some(vis),
+                    sig,
+                    block: Some(block),
+                },
+
+                | Self::TraitItemMethod(TraitItemMethod {
+                    ref mut attrs,
+                    ref mut sig,
+                    default: ref mut block,
+                    ..
+                })
+                => __ {
+                    attrs,
+                    // vis: None,
+                    sig,
+                    block: block.as_mut(),
+                },
+            }
+        }
     }
 }

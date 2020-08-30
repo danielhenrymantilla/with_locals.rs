@@ -34,9 +34,11 @@ quote = "1.0.*"
 [dependencies.syn]
 version = "1.0.*"
 features = [
-    "fold",
+    "extra-traits",
     "full",
-    "visit",
     "visit-mut",
-    # "extra-traits",
 ]
+
+[dev-dependencies]
+trybuild = "1.0.33"
+rustversion = "1.0.3"

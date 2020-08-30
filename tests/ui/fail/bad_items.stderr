@@ -1,0 +1,41 @@
+error: expected `fn`
+  --> $DIR/bad_items.rs:31:5
+   |
+31 |     union __ {}
+   |     ^^^^^
+
+error: expected `fn`
+  --> $DIR/bad_items.rs:26:5
+   |
+26 |     enum __ {}
+   |     ^^^^
+
+error: expected `fn`
+  --> $DIR/bad_items.rs:21:5
+   |
+21 |     struct __ {}
+   |     ^^^^^^
+
+error: expected `fn`
+  --> $DIR/bad_items.rs:16:5
+   |
+16 |     type __ = ();
+   |     ^^^^
+
+error: expected `fn`
+  --> $DIR/bad_items.rs:11:5
+   |
+11 |     static __: () = {};
+   |     ^^^^^^
+
+error: expected `fn`
+ --> $DIR/bad_items.rs:7:7
+  |
+7 | const _: () = {};
+  |       ^
+
+error: expected `fn`
+ --> $DIR/bad_items.rs:4:1
+  |
+4 | use self;
+  | ^^^
