@@ -29,7 +29,7 @@ callee who handles that object instead.
 
 By shifting the logic like so, it is the callee and not the caller
 who runs that logic, **which thus happens before the callee returns,
-cleaning its locals and making things that refer to it dangle.**
+so before it cleans its locals and makes things that refer to it dangle.**
 
 > This is the whole point of all this strategy!
 
