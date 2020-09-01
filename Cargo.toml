@@ -39,6 +39,12 @@ features = [
     "visit-mut",
 ]
 
+[features]
+nightly = []
+
 [dev-dependencies]
 trybuild = "1.0.33"
 rustversion = "1.0.3"
+
+[package.metadata.docs.rs]
+all-features = true

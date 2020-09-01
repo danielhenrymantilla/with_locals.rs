@@ -1,5 +1,10 @@
 #![forbid(unsafe_code)]
 
+#![cfg_attr(feature = "nightly",
+    feature(external_doc),
+    doc(include = "../README.md"),
+)]
+
 use ::core::ops::Not as _;
 
 use ::proc_macro::{
