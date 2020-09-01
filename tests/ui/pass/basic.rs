@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 include!("../prelude.rs");
 
 use ::core::fmt::Display;

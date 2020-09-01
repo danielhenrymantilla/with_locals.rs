@@ -28,13 +28,13 @@ categories = [
 ]
 
 [dependencies]
-proc-macro2 = "1.0.*"
-quote = "1.0.*"
+proc-macro2 = "=1.0.*"
+quote = "=1.0.*"
 
 [dependencies.syn]
-version = "1.0.*"
+version = ">=1.0.1" # Only tested starting from 1.0.1 because of rustversion
 features = [
-    "extra-traits",
+    # "extra-traits",
     "full",
     "visit-mut",
 ]

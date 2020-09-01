@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 include!("../prelude.rs");
 
 /// Renaming the `'self` lifetime to something else

@@ -1,0 +1,35 @@
+error: `#[with]` does not support attributes
+  --> $DIR/inner_with_failures.rs:41:13
+   |
+41 |     let _ = #[extraneous] foo();
+   |             ^
+
+error: `function(...)` or `<expr>.method(...)` expected
+  --> $DIR/inner_with_failures.rs:34:13
+   |
+34 |     let _ = 42;
+   |             ^^
+
+error: Expected a function name
+  --> $DIR/inner_with_failures.rs:27:13
+   |
+27 |     let _ = {foo}();
+   |             ^^^^^
+
+error: Missing expression
+  --> $DIR/inner_with_failures.rs:20:20
+   |
+20 |     let _incomplete;
+   |                    ^
+
+error: `#[with]` must be applied to a `let` binding.
+  --> $DIR/inner_with_failures.rs:13:13
+   |
+13 |     let _ = #[with] expr();
+   |             ^
+
+error: `#[with]` must be applied to a `let` binding.
+ --> $DIR/inner_with_failures.rs:6:5
+  |
+6 |     #[with]
+  |     ^

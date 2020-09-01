@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use ::core::ops::Not as _;
 
 use ::proc_macro::{
