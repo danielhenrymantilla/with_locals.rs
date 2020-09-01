@@ -3,7 +3,7 @@ proc-macro = true
 
 [package]
 name = "with_locals"
-version = "0.1.0"
+version = "0.0.1-alpha"
 authors = ["Daniel Henry-Mantilla <daniel.henry.mantilla@gmail.com>"]
 edition = "2018"
 
