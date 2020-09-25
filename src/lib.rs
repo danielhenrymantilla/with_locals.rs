@@ -126,4 +126,28 @@ mod __ {
             None
         }
     }
+
+    #[cfg(feature = "verbose-expansions")]
+    pub(in crate)
+    fn rustfmt (input: &'_ str)
+      -> Option<String>
+    {Some({
+        let mut child =
+            ::std::process::Command::new("rustfmt")
+                .stdin(::std::process::Stdio::piped())
+                .stdout(::std::process::Stdio::piped())
+                .spawn()
+                .ok()?
+        ;
+        match child.stdin.take().unwrap() { ref mut stdin => {
+            ::std::io::Write::write_all(stdin, input.as_bytes()).ok()?;
+        }}
+        let mut stdout = String::new();
+        ::std::io::Read::read_to_string(
+            &mut child.stdout.take().unwrap(),
+            &mut stdout,
+        ).ok()?;
+        child.wait().ok()?;
+        stdout
+    })}
 }

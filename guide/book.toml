@@ -1,0 +1,15 @@
+[book]
+authors = ["Daniel Henry-Mantilla"]
+language = "en"
+multilingual = false
+src = "src"
+title = """
+Continuation-Passing Style, or:
+How I Learned to Stop Worrying and Return Data Referring to Locals
+"""
+
+[rust]
+edition = "2018"
+
+[output.html.playground]
+editable = true
