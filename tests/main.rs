@@ -120,3 +120,15 @@ mod to_str {
         assert_eq!(out, include_str!("romans.txt"));
     }
 }
+
+#[test]
+#[with]
+fn results ()
+{
+    #[with]
+    fn result () -> Result<&'self (), ()>
+    {
+        Err(())?;
+        Ok(&())
+    }
+}

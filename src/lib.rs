@@ -34,9 +34,9 @@ use ::syn::{*,
 };
 
 enum Input {
-    ItemFn(ItemFn),
     TraitItemMethod(TraitItemMethod),
     ImplItemMethod(ImplItemMethod),
+    ItemFn(ItemFn),
 }
 
 impl Parse for Input {
@@ -74,16 +74,18 @@ impl Parse for Input {
                     "Missing `#[with]` annotation on the enscoping function"
                 ;
                 let span = Span::call_site();
+                // That being said, an item can be seen as an `Item::Stmt`,
+                // so make sure to bail out if that's the case.
                 let ref fork = input.fork();
                 match fork.parse::<Stmt>() {
                     | Err(_)
                     | Ok(Stmt::Item(_)) => {},
                     | Ok(_) => return Err(Error::new(span, MSG)),
                 }
+                // Ditto for `Expr`: a `union ...` can be parsed as one...
                 let ref fork = input.fork();
                 match fork.parse::<Expr>() {
                     | Err(_) => {},
-                    // A `union ...` can be parsed as an Expr !?
                     | Ok(Expr::Path(ExprPath {
                         qself: None,
                         path,
@@ -157,6 +159,18 @@ fn with (
         .into()
 }
 
+/// ```rust,ignore
+/// #[with] let var = func(/* args */);
+/// ...
+/// ```
+///
+/// must become:
+///
+/// ```rust,ignore
+/// func(/* args */, |var| {
+///     ...
+/// })
+/// ```
 fn handle_let_bindings (fun: &'_ mut Input)
   -> Result<()>
 {Ok({
@@ -579,6 +593,7 @@ fn handle_returning_locals (
                             expr: Some(ref mut expr),
                             ..
                         }) => {
+                            // recurse
                             self.visit_expr_mut(expr);
                             // ... becomes `return cont(<expr>)`
                             *expr = parse_quote! {
@@ -586,7 +601,31 @@ fn handle_returning_locals (
                             };
                         },
 
-                        | _ => visit_mut::visit_expr_mut(self, expr),
+                        // `<expr>?` carries a hidden `return Err(err.into())`
+                        // inside it, we need to change it:
+                        | Expr::Try(ExprTry {
+                            expr: ref mut inner_expr,
+                            // to span the error-related logic
+                            question_token: _, // FIXME(spans)?
+                            ..
+                        }) => {
+                            // recurse
+                            self.visit_expr_mut(inner_expr);
+                            *expr = parse_quote! {
+                                {
+                                    // use #krate::ResultOptionHack;
+                                    match #inner_expr/*.into_result_hack()*/ {
+                                        | Ok(it) => it,
+                                        | Err(err) => return __continuation__(Err(err).into()),
+                                    }
+                                }
+                            };
+                        }
+
+                        | _ => {
+                            // sub-recurse
+                            visit_mut::visit_expr_mut(self, expr);
+                        },
                     }
                 }
             }
@@ -596,11 +635,17 @@ fn handle_returning_locals (
             })
         }
         *block = parse_quote!({
+            // Some user-provided code patterns, once transformed, may scare
+            // Rust into thinking we are calling an `FnOnce()` multiple times.
+            // Since that _shouldn't_ be the case, we defer to a runtime check,
+            // hoping that, in practice, it will end up being optimized away.
             let mut #continuation_name = {
                 let mut #continuation_name =
                     ::core::option::Option::Some(#continuation_name)
                 ;
-                move |__ret__: #ret| #continuation_name.take().unwrap()(__ret__)
+                move |__ret__: #ret| {
+                    #continuation_name.take().unwrap()(__ret__)
+                }
             };
             macro_rules! #continuation_name { ($expr:expr) => (
                 match $expr { __ret__ => {
@@ -612,7 +657,7 @@ fn handle_returning_locals (
     }
 }
 
-use helpers::*;
+use helpers::{Fields as __};
 mod helpers {
     use super::*;
 
@@ -628,7 +673,7 @@ mod helpers {
     }
 
     pub(in super)
-    struct __<'fun> {
+    struct Fields<'fun> {
         pub(in super) attrs: &'fun mut Vec<Attribute>,
         // pub(in super) vis: Option<&'fun mut Visibility>,
         pub(in super) sig: &'fun mut Signature,
@@ -637,7 +682,7 @@ mod helpers {
 
     impl Input {
         pub(in super)
-        fn fields (self: &'_ mut Self) -> __<'_>
+        fn fields (self: &'_ mut Self) -> Fields<'_>
         {
             match *self {
                 | Self::ItemFn(ItemFn {
@@ -647,7 +692,7 @@ mod helpers {
                     ref mut block,
                     ..
                 })
-                => __ {
+                => Fields {
                     attrs,
                     // vis: Some(vis),
                     sig,
@@ -661,7 +706,7 @@ mod helpers {
                     ref mut block,
                     ..
                 })
-                => __ {
+                => Fields {
                     attrs,
                     // vis: Some(vis),
                     sig,
@@ -674,7 +719,7 @@ mod helpers {
                     default: ref mut block,
                     ..
                 })
-                => __ {
+                => Fields {
                     attrs,
                     // vis: None,
                     sig,
