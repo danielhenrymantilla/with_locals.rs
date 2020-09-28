@@ -4,7 +4,7 @@ use ::with_locals::with;
 
 /// A basic example: returning / yielding a `format_args` local.
 #[with]
-fn hex (n: u32) -> &'self dyn Display
+fn hex (n: u32) -> &'ref dyn Display
 {
     &format_args!("{:#x}", n)
 }
@@ -13,7 +13,7 @@ no_run! {
     /// The above becomes:
     fn with_hex<R, F> (n: u32, f: F) -> R
     where
-        F : for<'any> FnOnce(&'any dyn Display) -> R,
+        F : for<'local> FnOnce(&'local dyn Display) -> R,
     {
         f(&format_args!("{:#x}", n))
     }
@@ -66,6 +66,15 @@ no_run! {
     #[with] let two = hex(2);
     #[with] let three = hex(3);
 
+    // Or, equivalently:
+
+    let one: &'ref _ = hex(1);
+    let two: &'ref _ = hex(2);
+    let three: &'ref _ = hex(3);
+    //          ^^^^^
+    //          special lifetime is equivalent to marking the
+    //          `let` binding with `#[with]`.
+
     // When applied to a function, it will tranform all the so-annotated
     // `let` bindings into a closure call, where all the statements that
     // follow the binding (within the same scope) are moved into the
@@ -79,8 +88,7 @@ fn hex_example ()
 {
     let s: String = {
         println!("Hello, World!");
-        #[with]
-        let s_hex = hex(66);
+        let s_hex: &'ref _ = hex(66);
         println!("s_hex = {}", s_hex);
         let s = s_hex.to_string();
         assert_eq!(s, "0x42");
@@ -106,7 +114,7 @@ no_run! {
 /// Traits can have `#[with]`-annotated methods too.
 trait ToStr {
     #[with]
-    fn to_str (self: &'_ Self) -> &'self str
+    fn to_str (self: &'_ Self) -> &'ref str
     ;
 }
 
@@ -117,8 +125,7 @@ impl<T : ToStr> Display for Displayable<T> {
     fn fmt (self: &'_ Self, fmt: &'_ mut ::core::fmt::Formatter<'_>)
       -> ::core::fmt::Result
     {
-        #[with]
-        let s: &str = self.0.to_str();
+        let s: &'ref str = self.0.to_str();
         fmt.write_str(s)
     }
 }
@@ -130,10 +137,10 @@ impl ToStr for u32 {
     #[with('local)] // At any point, you can choose to use another name
                     // for the special lifetime that tells the attribute to
                     // transform the function into a `with_...` one.
-                    // By default, that name is `'self`, since it is currently
+                    // By default, that name is `'ref`, since it is currently
                     // forbidden by the compiler, and I find it quite on point.
                     //
-                    // But when `self` receivers are involved, this `'self`
+                    // But when `self` receivers are involved, this `'ref`
                     // name may be confusing. If you feel that's the case,
                     // feel free to rename it :)
     fn to_str (self: &'_ u32) -> &'local str
@@ -167,8 +174,7 @@ fn main ()
 {
     hex_example();
 
-    #[with]
-    let n: &str = ::core::u32::MAX.to_str();
+    let n: &'ref str = ::core::u32::MAX.to_str();
     dbg!(n);
     assert_eq!(n.parse(), Ok(::core::u32::MAX));
 
@@ -183,7 +189,7 @@ fn main ()
 // unsafe is ;)
 
 #[with]
-fn roman (mut n: u8) -> &'self str
+fn roman (mut n: u8) -> &'ref str
 {
     if n == 0 {
         panic!("Vade retro!");
@@ -230,8 +236,7 @@ fn roman (mut n: u8) -> &'self str
 fn romans ()
 {
     for n in 1 ..= u8::MAX {
-        #[with]
-        let s: &str = roman(n);
+        let s: &'ref str = roman(n);
         println!("{:3} = {}", n, s);
     }
 }

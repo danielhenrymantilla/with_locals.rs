@@ -9,8 +9,8 @@ for the caller and the callee:
 
 ### 1 - Cumbersome for the callee / the one defining the function
 
-  - Indeed, all the shenanigans with the callback / closure / continuation add a
-lot of noise to the code, drowning the meaningful info in it:
+  - Indeed, all the shenanigans with the callback / closure / continuation add
+    a lot of **noise** to the code, **drowning the meaningful info inside it**:
 
     ```rust,ignore
 {{#include snippets/cps-nested-refcell.rs:16:26}}
@@ -58,8 +58,8 @@ impl Struct {
 }
 ```
 
-Now we are talking! Now it looks like we are returning a _value referencing a
-temporary_, and getting away with it! With no `unsafe` whatsoever!
+Now we are talking! Now it _looks like_ we are **returning a value referencing a
+temporary**, and getting away with it! With no `unsafe` whatsoever!
 
 ![Ferris with sun glasses](assets/ferrisGlasses.png)
 
@@ -86,38 +86,29 @@ Well, let's not despair, since that's also something a procedural macro can
 ```rust,ignore
 use ::with_locals::with;
 
-#[with]
-fn main ()
-{
-    let s1 = Struct { ... };
-    let s2 = Struct { ... };
-    #[with] let bar1 = s1.bar();
-    #[with] let bar2 = s2.bar();
+#[with] // -------------------------------+
+fn main ()                             // |
+{                                      // |
+    let s1 = Struct { ... };           // |
+    let s2 = Struct { ... };           // |
+    let bar1: &'ref Bar = s1.bar(); // <-+ Transforms let bindings with
+    let bar2: &'ref _ = s2.bar();   // <-+ a special lifetime annotation.
     assert_eq!(bar1, bar2);
 }
 ```
 
-  - <details><summary>Why the attribute on <code>main</code>?</summary>
+  - <details><summary>How does that work?</summary>
 
-    Well, for two reasons:
-
-     1. Attributes on statements (such as a `let ...` binding) are _unstable_;
-
-     1. And even if they weren't, such an attribute would only be able to
-        transform that very statement, letting the rest of the block untouched.
-        Which means we cannot implement the desired transformation.
-
-    Indeed, the `#[with]` attribute, on a `let ...` binding statement, is
-    expected to tranform:
+    The `#[with]` attribute, is expected to tranform:
 
     ```rust,ignore
     let foo = { ... };
     let bar = {
-        ... // A = before the with, same scope
-        #[with] let var = function(/* args */);
-        ... // B = after the with, *same scope*
+        ... // A: before the special let, same scope
+        let var: ... 'special ... = function(/* args */);
+        ... // B: after the special let, *same* scope
     };
-    // C: after the with, outer scope
+    // C: after the special let, *outer* scope
     let baz = { ... };
     ```
 
@@ -135,22 +126,19 @@ fn main ()
     let baz = { ... };
     ```
 
-    So, as you can see, all the remainders of the block the `#[with]` statement
-    is located in (`... // B`), needs to be moved inside that generate _ad-hoc_
+    So, as you can see, all the remainders of the block the special `let` is
+    located in (`... // B`), need to be moved inside that generated _ad-hoc_
     continuation closure, which thus requires the macro to be able to "butcher"
-    these blocks as it sees fit. And the `#[with]` attribute applied to the
-    `let` binding statement has no such power.
+    these blocks as it sees fit.
 
     To achieve that, we need an attribute or a macro taking, _at least_, both
     the `let` binding and the `... // B` remainder of the block.
 
     That is, something (an **extra macro**) located _at least_, at an _outer_
     scope. A _preprocessor_, we could say, that will inspect the inner code,
-    looking for those `#[with] let ...` statements. At that point, it can
-    apply the transformation, stripping, at the same time, the `#[with]`
-    "attribute" itself (it turns out that the one located on `let`
-    statements is thus not a true attribute, just a dummy syntactic quirk used
-    to "mark" the `let ...` statements that the preprocessor needs to handle).
+    looking for those `let ...: 'special ... =` statements. At that point, it
+    can apply the transformation, stripping, at the same time, the `'special`
+    lifetime itself .
 
     > How "much outer"? How far?
 
@@ -159,23 +147,26 @@ fn main ()
 
     Indeed, it's "far enough" to cover all the statements located inside the
     function body; it is also convenient enough for the "preprocessor" to be
-    merged with the other attribute (the one allowing `'self`-infected return
-    values):
+    merged with the other attribute (the one allowing to do CPS while mocking
+    classic return values):
 
     ```rust,ignore
     use ::with_locals::with;
     use ::core::fmt::Display;
 
-    #[with]
-    fn to_str (x: i32) -> &'self str
+    #[with] // ------------++++ transforms the function into
+            //             vvvv `with_to_str`, which takes a callback.
+    fn to_str (x: i32) -> &'ref str
     {
         ...
     }
 
-    #[with]
-    fn to_displayable (x: i32) -> &'self (dyn Display)
-    {
-        #[with] let s: &str = to_str(x);
+    #[with] // ---+----------------++++ ditto
+            //    |                vvvv
+    fn to_displayable (x: i32) -> &'ref (dyn Display)
+    {   //        | also transforms this `let` into a call to `with_to_str`
+        //      vvvv                                  that uses a callback
+        let s: &'ref str = to_str(x);
         &s
     }
     ```
@@ -211,7 +202,7 @@ impl Struct {
     }
 }
 
-#[with]
+#[with('local)]
 fn main ()
 {
     let s = Struct {
@@ -221,6 +212,6 @@ fn main ()
         # }),
         // ...
     };
-    let bar: &'local Bar = s.bar();
+    let bar: &'local _ = s.bar();
     println!("bar = {:?}", bar);
 }

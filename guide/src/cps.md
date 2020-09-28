@@ -2,7 +2,7 @@
 
 The reason why
 
-```rust,compile_fail
+```rust,compile_fail,editable
 fn get_dangling_reference<'a> ()
   -> &'a i32
 {
@@ -240,8 +240,9 @@ Once we focus on the inlined case, we can come up with two easy workarounds:
 
 ### Option 1: store the local variables in the outer (caller) scope:
 
-```rust
+```rust,editable
 # use ::core::mem::drop as stuff;
+#
 fn caller ()
 {
     let x; // this local is dropped -+
@@ -268,7 +269,7 @@ A very recurring situation in Rust is that of:
 Heap-allocating the latter is thus, when performance is important,
 an anti-pattern.
 
-```rust
+```rust,editable
 // Don't do this!
 let name: String =
     ::std::env::var("NAME").ok()
@@ -289,7 +290,7 @@ Instead, the right way to save an allocation is by using something like
 
 [`Cow`]: https://doc.rust-lang.org/alloc/borrow/enum.Cow.html
 
-```rust
+```rust,editable
 type Str = ::std::borrow::Cow<'static, str>;
 
 let name: Str =
@@ -303,7 +304,7 @@ The issue with this pattern is that every `str` operation on our `Str` will
 incur in a branching operation. Indeed, `Cow<'static, str>` `derefs` to `str`
 by doing:
 
-```rust,ignore
+```rust,ignore,noplayground
 match *self {
     | Cow::Borrowed(str /*: &'static str */) => str,
     | Cow::Owned(ref string /*: String */) => string.as_str(),
@@ -313,7 +314,7 @@ match *self {
 So, to solve this, it is good practice to immediately perform the `.deref()`
 once, early, to get the resulting `&'_ str` immediately:
 
-```rust
+```rust,editable
 type Str = ::std::borrow::Cow<'static, str>;
 
 let name: Str =
@@ -328,7 +329,7 @@ Well, the **trick** is that one does not need `Cow` for the above, the same can
 be achieved using long(er)-lived storage, through _delayed_ (and optional)
 initializtion:
 
-```rust
+```rust,editable
 let storage: String;
 let name: &'_ str = match ::std::env::var("NAME").ok() {
     | Some(name) => { storage = name; storage.as_str() },
@@ -356,8 +357,9 @@ But it does have drawbacks:
 For what it's worth, this is how we'd translate the above pattern as a a helper
 function:
 
-```rust
+```rust,editable
 # use ::core::mem::drop as stuff;
+#
 fn caller ()
 {
     let mut x = None;
@@ -439,7 +441,7 @@ ___
 
 ### Option 2: simply move the usage of the reference inside the inner scope
 
-```rust
+```rust,editable
 fn caller ()
 {
     let return_value_of_stuff = {
@@ -465,10 +467,10 @@ the actual problem at hand is:
 And regarding the idea of factoring out that logic into its own function, it's
 actually pretty easy, albeit cumbersome:
 
-```rust
+```rust,editable
 # use ::core::mem::drop as stuff;
-# #[cfg(any())]
-fn caller ()
+#
+fn caller_1 ()
 {
     let return_value_of_stuff = {
         let x = 0;
@@ -477,21 +479,21 @@ fn caller ()
     };
 }
 // becomes
-fn caller ()
+fn caller_2 ()
 {
     let return_value_of_stuff = (|then_| {
         # let _: fn(&'_ i32) -> _ = then_;
         let x = 0;
         then_(&x);
-    })(|r| {
-        stuff(r)
-    });
+    })(|r| {     // <-\ 
+        stuff(r) // <-+-- this is `then_`
+    });          // <-/
 }
 ```
 
 That is:
 
-```rust
+```rust,editable
 fn caller ()
 {
     fn with_local_reference<R> (
@@ -512,7 +514,7 @@ fn caller ()
 
   - <details><summary>Alternatives names for the closure / callback / continuation</summary>
 
-    ```rust,ignore
+    ```rust,ignore,noplayground
     // another name:
     fn with_local_reference<R> (
         /* args ..., */
@@ -557,14 +559,15 @@ fn caller ()
 
 If you now stare at the two previous snippets long enough (inlined and factored
 out versions), we can notice how "moving the logic into a part where the locals
-are still alive", which was the simulatenously obvious and brilliant idea,
+are still alive", which was the simultaneously obvious and brilliant idea,
 represents, when dealing with a factored out function, a shift between:
 
   - querying **the callee to give** us (the caller) a value **we can
     work** with,
 
   - _v.s._ **giving the callee** the **work** (with the value) we would have
-    wished to run, so that **it is the callee who does the work**.
+    wished to run, so that **it is the callee who does the work** (instead of
+    us).
 
 Such a simple shift, but with so big consequences: since the callee gets to
 work with the value before it has to `return` and clean up its own locals, it
@@ -572,8 +575,8 @@ gets to keep them, making everything _Just Work_.
 
 <div style="width:100%;height:0;padding-bottom:60%;position:relative;"><iframe src="https://giphy.com/embed/2rqEdFfkMzXmo" width="100%" height="100%" style="position:absolute" frameBorder="0" class="giphy-embed" allowFullScreen></iframe></div><p><a href="https://giphy.com/gifs/stress-i-need-a-drink-brain-explode-2rqEdFfkMzXmo">via GIPHY</a></p>
 
-This shift, when generalized as a language or just programming pattern is
-called
+This shift, when generalized as a language or just a programming pattern, is
+called:
 
 > [**Continuation-Passing Style** (CPS)](
     https://en.wikipedia.org/wiki/Continuation-passing_style)

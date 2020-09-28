@@ -120,7 +120,7 @@ impl Parse for Attrs {
       -> Result<Self>
     {
         let mut ret = Self {
-            lifetime: "self".into(),
+            lifetime: "ref".into(),
             continuation: None,
         };
         if let Some(lt) = input.parse::<Option<Lifetime>>()? {
@@ -145,18 +145,57 @@ fn with (
     input: TokenStream,
 ) -> TokenStream
 {
-    let (attrs, mut fun) = (
+    let (ref attrs, ref mut fun) = (
         parse_macro_input!(attrs as Attrs),
         parse_macro_input!(input as Input),
     );
 
-    handle_returning_locals(&mut fun, attrs);
-    if let Err(err) = handle_let_bindings(&mut fun) {
+    handle_returning_locals(&mut *fun, attrs);
+    if let Err(err) = handle_let_bindings(&mut *fun, attrs) {
         return err.to_compile_error().into();
     }
 
-    fun .to_token_stream()
-        .into()
+    let ret = fun.to_token_stream();
+    macro_rules! ret {() => ( return ret.into() )}
+
+    #[cfg(feature = "verbose-expansions")] {
+    if  ::std::env::var("WITH_LOCALS_DEBUG_FILTER")
+            .ok()
+            .map_or(true, |ref filter| {
+                fun .fields()
+                    .sig
+                    .ident
+                    .to_string()
+                    .contains(filter)
+            })
+    {
+        let ref config = {
+            let mut config = ::rustfmt::config::Config::default();
+            // config.override_value("edition", "2018");
+            config
+        };
+        if let Ok((_, fm, _)) = ::rustfmt::format_input(
+                ::rustfmt::Input::Text(ret.to_string()),
+                config,
+                Some(&mut ::std::io::sink()), // None::<&'_ mut ::std::io::Sink>,
+            )
+        {
+            if let Some(formatted) = fm.get(0).map(|(_, it)| it.to_string()) {
+                if  ::bat::PrettyPrinter::new()
+                        .input_from_bytes(formatted.as_ref())
+                        .language("rust")
+                        .print()
+                        .is_ok()
+                {
+                    ret!();
+                }
+                println!("{}", formatted);
+                ret!();
+            }
+        }
+        println!("{}", ret);
+    }}
+    ret!();
 }
 
 /// ```rust,ignore
@@ -171,11 +210,14 @@ fn with (
 ///     ...
 /// })
 /// ```
-fn handle_let_bindings (fun: &'_ mut Input)
-  -> Result<()>
+fn handle_let_bindings (
+    fun: &'_ mut Input,
+    &Attrs { ref lifetime, .. }: &'_ Attrs,
+) -> Result<()>
 {Ok({
     struct ReplaceLetBindingsWithWithCalls<'__> {
         encountered_error: &'__ mut Option<::syn::Error>,
+        lifetime: &'__ str,
     }
     impl VisitMut for ReplaceLetBindingsWithWithCalls<'_> {
         fn visit_block_mut (
@@ -198,6 +240,7 @@ fn handle_let_bindings (fun: &'_ mut Input)
 
             let mut with_idx = None;
             for (i, stmt) in (0 ..).zip(&mut block.stmts) {
+                // `( #[with] )? let <binding> (: <ty>)? = <expr>;`
                 if let Stmt::Local(ref mut let_binding) = *stmt {
                     let mut has_with = false;
                     let_binding.attrs.retain(|attr| {
@@ -213,6 +256,14 @@ fn handle_let_bindings (fun: &'_ mut Input)
                             true
                         }
                     });
+                    // Also look for a special lifetime
+                    has_with |= {
+                        let ref mut lifetimes = vec![];
+                        LifetimeVisitor { lifetimes, lifetime: self.lifetime }
+                            .visit_pat_mut(&mut let_binding.pat)
+                        ;
+                        lifetimes.is_empty().not()
+                    };
                     if has_with {
                         with_idx = Some(i);
                         break;
@@ -367,6 +418,7 @@ fn handle_let_bindings (fun: &'_ mut Input)
     let mut encountered_error = None;
     let mut visitor = ReplaceLetBindingsWithWithCalls {
         encountered_error: &mut encountered_error,
+        lifetime: &*lifetime,
     };
     use ::std::panic;
     if let Err(panic) = panic::catch_unwind(panic::AssertUnwindSafe(|| {
@@ -393,7 +445,7 @@ fn handle_let_bindings (fun: &'_ mut Input)
 
 fn handle_returning_locals (
     fun: &'_ mut Input,
-    Attrs { lifetime, continuation }: Attrs,
+    &Attrs { ref lifetime, ref continuation }: &'_ Attrs,
 )
 {
     let continuation_name =
@@ -411,29 +463,6 @@ fn handle_returning_locals (
         }
     ;
     let mut lifetimes = vec![]; {
-        struct LifetimeVisitor<'__> {
-            lifetime: &'__ str,
-            lifetimes: &'__ mut Vec<(/*Lifetime*/)>,
-        }
-        impl VisitMut for LifetimeVisitor<'_> {
-            fn visit_lifetime_mut (
-                self: &'_ mut Self,
-                lifetime: &'_ mut Lifetime,
-            )
-            {
-                if lifetime.ident == self.lifetime {
-                    // lifetime.ident = format_ident!(
-                    //     "__self_{}__", self.lifetimes.len(),
-                    //     span = lifetime.ident.span(),
-                    // );
-                    lifetime.ident =
-                        format_ident!("_", span = lifetime.ident.span())
-                    ;
-                    self.lifetimes.push({ /* lifetime.clone() */ });
-                }
-            }
-        }
-
         LifetimeVisitor { lifetimes: &mut lifetimes, lifetime: &*lifetime }
             .visit_type_mut(ret_ty)
         ;
@@ -657,7 +686,7 @@ fn handle_returning_locals (
     }
 }
 
-use helpers::{Fields as __};
+use helpers::{Fields as __, LifetimeVisitor};
 mod helpers {
     use super::*;
 
@@ -668,6 +697,34 @@ mod helpers {
                 | Input::ItemFn(ref inner) => inner.to_tokens(out),
                 | Input::TraitItemMethod(ref inner) => inner.to_tokens(out),
                 | Input::ImplItemMethod(ref inner) => inner.to_tokens(out),
+            }
+        }
+    }
+
+    pub (in super)
+    struct LifetimeVisitor<'__> {
+        pub (in super)
+        lifetime: &'__ str,
+
+        pub (in super)
+        lifetimes: &'__ mut Vec<(/*Lifetime*/)>,
+    }
+
+    impl VisitMut for LifetimeVisitor<'_> {
+        fn visit_lifetime_mut (
+            self: &'_ mut Self,
+            lifetime: &'_ mut Lifetime,
+        )
+        {
+            if lifetime.ident == self.lifetime {
+                // lifetime.ident = format_ident!(
+                //     "__self_{}__", self.lifetimes.len(),
+                //     span = lifetime.ident.span(),
+                // );
+                lifetime.ident =
+                    format_ident!("_", span = lifetime.ident.span())
+                ;
+                self.lifetimes.push({ /* lifetime.clone() */ });
             }
         }
     }

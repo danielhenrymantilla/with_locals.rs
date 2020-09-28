@@ -22,7 +22,7 @@ This is a tale about an oh so well-known compilation error:
 Let's start with the basic code examples associated with [the explanation of
 that error code][\[E0515\]]:
 
-```rust,compile_fail
+```rust,editable,compile_fail
 fn get_dangling_reference<'a> ()
   -> &'a i32
 {
@@ -42,7 +42,7 @@ Across this series of posts we will see how I managed to feature a
 procedural macro to allow writing that very pattern, all **without any `unsafe`
 code whatsoever**:
 
-```rust,ignore
+```rust,ignore,noplayground
 # #[macro_use] extern crate with_locals;
 #
 #[with]
