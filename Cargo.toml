@@ -32,7 +32,6 @@ proc-macro2 = "=1.0.*"
 quote = "=1.0.*"
 
 bat = { optional = true, version = "0.15.4" }
-rustfmt = { optional = true, version = "=0.10.0" }
 
 [dependencies.syn]
 version = ">=1.0.1" # Only tested starting from 1.0.1 because of rustversion
@@ -44,10 +43,7 @@ features = [
 
 [features]
 nightly = []
-verbose-expansions = [
-    "bat", # code highlighting
-    "rustfmt", # code formattting
-]
+verbose-expansions = ["bat"]
 
 [dev-dependencies]
 trybuild = "1.0.33"

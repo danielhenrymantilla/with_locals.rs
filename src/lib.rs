@@ -156,7 +156,6 @@ fn with (
     }
 
     let ret = fun.to_token_stream();
-    macro_rules! ret {() => ( return ret.into() )}
 
     #[cfg(feature = "verbose-expansions")] {
     if  ::std::env::var("WITH_LOCALS_DEBUG_FILTER")
@@ -169,33 +168,22 @@ fn with (
                     .contains(filter)
             })
     {
-        let ref config = {
-            let mut config = ::rustfmt::config::Config::default();
-            // config.override_value("edition", "2018");
-            config
-        };
-        if let Ok((_, fm, _)) = ::rustfmt::format_input(
-                ::rustfmt::Input::Text(ret.to_string()),
-                config,
-                Some(&mut ::std::io::sink()), // None::<&'_ mut ::std::io::Sink>,
-            )
-        {
-            if let Some(formatted) = fm.get(0).map(|(_, it)| it.to_string()) {
-                if  ::bat::PrettyPrinter::new()
-                        .input_from_bytes(formatted.as_ref())
-                        .language("rust")
-                        .print()
-                        .is_ok()
-                {
-                    ret!();
-                }
+        if let Some(ref formatted) = helpers::rustfmt(&ret.to_string()) {
+            if  ::bat::PrettyPrinter::new()
+                    .input_from_bytes(formatted.as_ref())
+                    .language("rust")
+                    .true_color(false)
+                    .print()
+                    .is_err()
+            {
                 println!("{}", formatted);
-                ret!();
             }
+        } else {
+            println!("{}", ret);
         }
-        println!("{}", ret);
     }}
-    ret!();
+
+    ret.into()
 }
 
 /// ```rust,ignore
@@ -785,4 +773,28 @@ mod helpers {
             }
         }
     }
+
+    #[cfg(feature = "verbose-expansions")]
+    pub(in crate)
+    fn rustfmt (input: &'_ str)
+      -> Option<String>
+    {Some({
+        let mut child =
+            ::std::process::Command::new("rustfmt")
+                .stdin(::std::process::Stdio::piped())
+                .stdout(::std::process::Stdio::piped())
+                .spawn()
+                .ok()?
+        ;
+        match child.stdin.take().unwrap() { ref mut stdin => {
+            ::std::io::Write::write_all(stdin, input.as_bytes()).ok()?;
+        }}
+        let mut stdout = String::new();
+        ::std::io::Read::read_to_string(
+            &mut child.stdout.take().unwrap(),
+            &mut stdout,
+        ).ok()?;
+        child.wait().ok()?;
+        stdout
+    })}
 }
