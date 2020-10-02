@@ -4,7 +4,7 @@ error: `#[with]` does not support attributes
 41 |     let _ = #[extraneous] foo();
    |             ^
 
-error: `function(...)` or `<expr>.method(...)` expected
+error: expected `function(...)`, `function(...)?...?`, or `<expr>.method(...)`, or `<expr>.method(...)?...?`
   --> $DIR/inner_with_failures.rs:34:13
    |
 34 |     let _ = 42;
