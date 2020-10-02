@@ -243,3 +243,16 @@ fn romans ()
 
 /// Allow us to add comments and ignored code snippets anywhere
 #[macro_export] macro_rules! no_run {($($tt:tt)*) => ()}
+
+#[with]
+fn result () -> Result<&'ref (), ()>
+{
+    if false {
+        {
+            #[with] let it = result();
+            Ok({ it?; })
+        }?;
+    };
+    Err(())?;
+    Ok(&())
+}

@@ -10,7 +10,7 @@ use ::core::fmt::Display;
 fn hex ()
 {
     #[with]
-    fn hex (n: u32) -> &'self dyn Display
+    fn hex (n: u32) -> &'ref dyn Display
     {
         &format_args!("{:#x}", n)
     }
@@ -65,7 +65,7 @@ mod to_str {
 
         struct Roman(u8); impl ToStr for Roman {
             #[with]
-            fn to_str (self: &'_ Self) -> &'self str
+            fn to_str (self: &'_ Self) -> &'ref str
             {
                 let mut buf = [b' '; 1 + 4 + 4];  // C LXXX VIII or CC XXX VIII
                 let mut start = buf.len();
@@ -126,8 +126,12 @@ mod to_str {
 fn results ()
 {
     #[with]
-    fn result () -> Result<&'self (), ()>
+    fn result () -> Result<&'ref (), ()>
     {
+        if false {
+            #[with] let it = result();
+            it?;
+        };
         Err(())?;
         Ok(&())
     }

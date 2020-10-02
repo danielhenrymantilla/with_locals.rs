@@ -2,7 +2,7 @@
 
 include!("../prelude.rs");
 
-/// Renaming the `'self` lifetime to something else
+/// Renaming the `'ref` lifetime to something else
 const _: () = {
     trait ToStr {
         #[with('local)]
@@ -35,19 +35,19 @@ const _: () = {
 /// Manually hand-rolling the continuation
 #[with(continuation_name = ret)]
 fn inside_if_yadda_early_return (n: u32)
-  -> &'self str
+  -> &'ref str
 {
     use ::core::fmt::Display;
 
     #[with]
-    fn returns_local (n: u32) -> &'self dyn Display
+    fn returns_local (n: u32) -> &'ref dyn Display
     {
         &format_args!("{:#x}", n)
     }
 
     if true {
-        #[with]
-        let it: &dyn Display = returns_local(n);
+        #[with] let _it: &dyn Display = returns_local(n);
+        let it: &'ref dyn Display = returns_local(n);
         let s = it.to_string();
         return ret(&*s);
     } else {

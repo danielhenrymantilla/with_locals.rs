@@ -9,13 +9,13 @@ fn empty ()
 {}
 
 #[with]
-fn returns_local (n: u32) -> &'self dyn Display
+fn returns_local (n: u32) -> &'ref dyn Display
 {
     &format_args!("{:#x}", n)
 }
 
 #[with]
-fn uses_return_local (n: u32)
+fn uses_returns_local (n: u32)
 {
     #[with]
     let it: &dyn Display = returns_local(n);
@@ -23,8 +23,8 @@ fn uses_return_local (n: u32)
 }
 
 #[with]
-fn uses_return_local_and_returns_a_local_too (n: u32)
-  -> &'self str
+fn uses_returns_local_and_returns_a_local_too (n: u32)
+  -> &'ref str
 {
     #[with]
     let it: &dyn Display = returns_local(n);
@@ -33,8 +33,8 @@ fn uses_return_local_and_returns_a_local_too (n: u32)
 }
 
 #[with]
-fn inside_if_uses_return_local_and_returns_a_local_too (n: u32)
-  -> &'self str
+fn inside_if_uses_return_local_and_returns_a_local_itself (n: u32)
+  -> &'ref str
 {
     if true {
         #[with]
@@ -48,7 +48,7 @@ fn inside_if_uses_return_local_and_returns_a_local_too (n: u32)
 
 #[with]
 fn inside_if_yadda_early_return (n: u32)
-  -> &'self str
+  -> &'ref str
 {
     if true {
         #[with]
@@ -64,7 +64,7 @@ fn inside_if_yadda_early_return (n: u32)
 
 #[with]
 fn inside_match_uses_return_local_and_returns_a_local_too (n: u32)
-  -> &'self str
+  -> &'ref str
 {
     match true {
         | true => {
