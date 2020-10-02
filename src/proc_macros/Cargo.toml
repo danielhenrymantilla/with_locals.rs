@@ -1,0 +1,46 @@
+[lib]
+proc-macro = true
+path = "mod.rs"
+
+[package]
+name = "with_locals-proc_macros"
+version = "0.1.0-rc1"
+authors = ["Daniel Henry-Mantilla <daniel.henry.mantilla@gmail.com>"]
+edition = "2018"
+
+license = "Zlib OR MIT OR Apache-2.0"
+
+documentation = "https://docs.rs/with_locals"
+repository = "https://github.com/danielhenrymantilla/with_locals.rs"
+homepage = "https://crates.io/crates/with_locals"
+
+readme = "../../README.md"
+
+description = "TODO!"
+keywords = [
+    "with",
+    "locals",
+    "callback",
+    "closures",
+    "cps",
+]
+categories = [
+    "rust-patterns",
+]
+
+[dependencies]
+proc-macro2 = "=1.0.*"
+quote = "=1.0.*"
+
+bat = { optional = true, version = "0.15.4" }
+
+[dependencies.syn]
+version = ">=1.0.1" # Only tested starting from 1.0.1 because of rustversion
+features = [
+    # "extra-traits",
+    "full",
+    "visit-mut",
+]
+
+[features]
+verbose-expansions = ["bat"]
