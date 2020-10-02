@@ -1,10 +1,9 @@
-[lib]
-proc-macro = true
-
 [package]
 name = "with_locals"
-version = "0.0.1-alpha-2"
-authors = ["Daniel Henry-Mantilla <daniel.henry.mantilla@gmail.com>"]
+version = "0.1.0-rc1"
+authors = [
+    "Daniel Henry-Mantilla <daniel.henry.mantilla@gmail.com>",
+]
 edition = "2018"
 
 license = "Zlib OR MIT OR Apache-2.0"
@@ -15,7 +14,7 @@ homepage = "https://crates.io/crates/with_locals"
 
 readme = "README.md"
 
-description = "TODO!"
+description = "Function attribute to return references to locals by using CPS"
 keywords = [
     "with",
     "locals",
@@ -27,23 +26,13 @@ categories = [
     "rust-patterns",
 ]
 
-[dependencies]
-proc-macro2 = "=1.0.*"
-quote = "=1.0.*"
-
-bat = { optional = true, version = "0.15.4" }
-
-[dependencies.syn]
-version = ">=1.0.1" # Only tested starting from 1.0.1 because of rustversion
-features = [
-    # "extra-traits",
-    "full",
-    "visit-mut",
-]
+[dependencies.proc_macros]
+path = "src/proc_macros"
+package = "with_locals-proc_macros"
 
 [features]
 nightly = []
-verbose-expansions = ["bat"]
+verbose-expansions = ["proc_macros/verbose-expansions"]
 
 [dev-dependencies]
 trybuild = "1.0.33"
@@ -51,3 +40,6 @@ rustversion = "1.0.3"
 
 [package.metadata.docs.rs]
 all-features = true
+
+[workspace]
+members = ["src/proc_macros"]

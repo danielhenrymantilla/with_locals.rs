@@ -10,7 +10,7 @@ use ::core::fmt::Display;
 fn hex ()
 {
     #[with]
-    fn hex (n: u32) -> &'self dyn Display
+    fn hex (n: u32) -> &'ref dyn Display
     {
         &format_args!("{:#x}", n)
     }
@@ -65,7 +65,7 @@ mod to_str {
 
         struct Roman(u8); impl ToStr for Roman {
             #[with]
-            fn to_str (self: &'_ Self) -> &'self str
+            fn to_str (self: &'_ Self) -> &'ref str
             {
                 let mut buf = [b' '; 1 + 4 + 4];  // C LXXX VIII or CC XXX VIII
                 let mut start = buf.len();
@@ -123,12 +123,93 @@ mod to_str {
 
 #[test]
 #[with]
-fn results ()
+fn loops ()
 {
-    #[with]
-    fn result () -> Result<&'self (), ()>
-    {
-        Err(())?;
-        Ok(&())
+    use ::core::cell::RefCell;
+
+    trait Iterable {
+        #[with]
+        fn next (self: &'_ mut Self)
+          -> Option<&'ref i32>
+        ;
     }
+
+    fn iter_refcells (refcells: &'_ [RefCell<i32>])
+      -> impl '_ + Iterable
+    {
+        return Ret(refcells.iter());
+        // where
+        struct Ret<'__> (::core::slice::Iter<'__, RefCell<i32>>);
+        impl Iterable for Ret<'_> {
+            #[with]
+            fn next (self: &'_ mut Self)
+              -> Option<&'ref i32>
+            {
+                Some(&*self.0.next()?.borrow())
+            }
+        }
+    }
+
+    let ref elems = [
+        RefCell::new(0),
+        RefCell::new(1),
+        RefCell::new(2),
+        RefCell::new(3),
+    ];
+
+    let mut iterable = iter_refcells(elems);
+    let mut acc = vec![];
+    loop {
+        #[with]
+        let next = iterable.next();
+        if let Some(&item) = next {
+            if item == 1 { continue; }
+            acc.push(item)
+        } else {
+            break;
+        }
+    }
+    assert_eq!(
+        acc,
+        [0, 2, 3],
+    );
+    /* The above loop unsugared to:
+    ```rust
+    loop {
+        match iterable.with_next(|next| {
+            ::with_locals::__::ControlFlow::<
+                _,
+                ::with_locals::__::Unreachable,
+                ::with_locals::__::Unreachable,
+                _,
+                (),
+            >::Eval({
+                if let Some(&item) = next {
+                    if item == 1 {
+                        return ::with_locals::__::ControlFlow::Continue(());
+                    }
+                    acc.push(item)
+                } else {
+                    return ::with_locals::__::ControlFlow::Break(());
+                }
+            })
+        }) {
+            ::with_locals::__::ControlFlow::Eval(it) => it,
+            ::with_locals::__::ControlFlow::EarlyReturn(it) => {
+                let unreachable = it;
+                match unreachable {}
+            }
+            ::with_locals::__::ControlFlow::PropagateError(it) => {
+                let unreachable = it;
+                match unreachable {}
+            }
+            ::with_locals::__::ControlFlow::Break(it) => break it,
+            ::with_locals::__::ControlFlow::Continue(it) => {
+                let () = it;
+                continue;
+            }
+        }
+    }
+    ```
+    */
 }
