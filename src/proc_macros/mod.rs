@@ -8,7 +8,7 @@ use ::proc_macro2::{
 use ::quote::{
     format_ident,
     quote,
-    // quote_spanned,
+    quote_spanned,
     ToTokens,
 };
 use ::syn::{*,
@@ -54,6 +54,8 @@ struct Attrs {
     continuation: Option<Ident>,
 }
 
+/// See [the main documentation of the crate for info about this attribute](
+/// https://docs.rs/with_locals).
 #[proc_macro_attribute] pub
 fn with (
     attrs: TokenStream,
@@ -72,7 +74,7 @@ fn with (
 
     let ret = fun.to_token_stream();
 
-    #[cfg(feature = "verbose-expansions")] {
+    #[cfg(feature = "expand-macros")] {
         helpers::pretty_print_tokenstream(
             &ret,
             &fun.fields().sig.ident,

@@ -92,19 +92,6 @@ fn results ()
     }))();
 }
 
-#[with]
-fn loops ()
-{
-    #[with] fn f () -> &'ref () { &() }
-    loop {
-        let it: &'ref () = f();
-        if false { continue; }
-        if false { break; }
-        if true { return; }
-        drop(it);
-    }
-}
-
 const _: () = {
     enum Void {}
     type None = Option<Void>;
@@ -117,8 +104,24 @@ const _: () = {
         fn options ()
           -> Option<Option<Option<&'ref ()>>>
         {
+            fn _item_inside_function_body ()
+              -> Option<()>
+            {
+                None?;
+                return None;
+            }
+
             #[with]
             let _it = options()???;
+            {
+                fn _item_inside_trailing_stmts ()
+                  -> Option<()>
+                {
+                    None?;
+                    return None;
+                }
+            }
+
             None
         }
 
@@ -127,3 +130,45 @@ const _: () = {
         None
     }
 };
+
+#[with]
+fn loops ()
+{
+    #[with] fn f () -> &'ref () { &() }
+
+    loop {
+        let it: &'ref () = f();
+        if false { continue; }
+        if false { break; }
+        if false { break (); }
+        if true { return; }
+        drop(it);
+    }
+
+    for _ in 0 .. {
+        let it: &'ref () = f();
+        if false { continue; }
+        if false { break; }
+        // if false { break (); }
+        if true { return; }
+        drop(it);
+    }
+
+    while false {
+        let it: &'ref () = f();
+        if false { continue; }
+        if false { break; }
+        // if false { break (); }
+        if true { return; }
+        drop(it);
+    }
+
+    while let 1 ..= 1 = 2 {
+        let it: &'ref () = f();
+        if false { continue; }
+        if false { break; }
+        // if false { break (); }
+        if true { return; }
+        drop(it);
+    }
+}

@@ -99,7 +99,7 @@ impl Input {
     }
 }
 
-#[cfg(feature = "verbose-expansions")]
+#[cfg(feature = "expand-macros")]
 pub(in super)
 fn pretty_print_tokenstream (
     code: &'_ TokenStream2,

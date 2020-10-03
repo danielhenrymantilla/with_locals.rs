@@ -53,6 +53,14 @@ struct ReplaceLetBindingsWithCbCalls<'__> {
     lifetime: &'__ str,
 }
 impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
+    fn visit_item_mut (
+        self: &'_ mut Self,
+        _: &'_ mut Item,
+    )
+    {
+        // Do not recurse into items defined inside the function body.
+    }
+
     fn visit_block_mut (
         self: &'_ mut Self,
         block: &'_ mut Block,
@@ -234,7 +242,6 @@ impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
 
             let wrap_statements_inside_closure_body::Ret {
                 closure_body,
-                wrap_err,
                 wrap_ret,
                 wrap_break,
                 wrap_continue } =
@@ -259,7 +266,6 @@ impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
                 match #call {
                     | #ControlFlow::Eval(it) => it,
                     | #ControlFlow::EarlyReturn(it) => #wrap_ret,
-                    | #ControlFlow::PropagateError(it) => #wrap_err,
                     | #ControlFlow::Break(it) => #wrap_break,
                     | #ControlFlow::Continue(it) => #wrap_continue,
                 }
@@ -299,13 +305,5 @@ impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
             )));
         }
         // visit_mut::visit_attribute_mut(self, attr); /* No need */
-    }
-
-    fn visit_item_mut (
-        self: &'_ mut Self,
-        _: &'_ mut Item,
-    )
-    {
-        // Do not recurse into items defined inside the function body.
     }
 }

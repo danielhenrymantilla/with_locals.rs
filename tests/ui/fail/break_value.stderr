@@ -1,0 +1,10 @@
+error[E0571]: `break` with value from a `for` loop
+  --> $DIR/break_value.rs:11:13
+   |
+11 |             break ();
+   |             ^^^^^^^^ can only break with a value inside `loop` or breakable block
+   |
+help: instead, use `break` on its own without a value inside this `for` loop
+   |
+11 |             break;
+   |             ^^^^^

@@ -16,23 +16,6 @@ macro_rules! mk_throw {(
     }
 )}
 
-// macro_rules! my_parse_quote {(
-//     $($tt:tt)*
-// ) => ({
-//     #[cfg(feature = "verbose-expansions")]
-//     let storage;
-//     let mut s = &quote!( $($tt)* ).to_string();
-//     s = s;
-//     #[cfg(feature = "verbose-expansions")] {
-//         if let Some(formatted) = crate::helpers::rustfmt(s) {
-//             storage = formatted;
-//             s = &storage
-//         };
-//     }
-//     eprintln!("`parse_quote!` input:\n{}", s);
-//     ::syn::parse_quote!( $($tt)* )
-// })}
-
 macro_rules! proc_macro_use {(
     use $dol:tt $krate:ident::{$($item:ident),* $(,)? };
 ) => (

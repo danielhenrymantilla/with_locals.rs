@@ -13,19 +13,12 @@ pub use ::proc_macros::with;
 #[doc(hidden)] /** Not part of the public API **/ pub
 mod __ {
     pub
-    enum ControlFlow<Eval, Error, Return, Break, Continue> {
+    enum ControlFlow<Eval, Return, Break, Continue> {
         /// Classic block evaluation.
         Eval(Eval),
 
         /// Must `return` the value early.
         EarlyReturn(Return),
-
-        /// Must propagate the encountered error.
-        ///
-        /// Cannot be wrapped within the previous variant because in order to
-        /// support `None`s, we need to apply to this returned value
-        /// `Try::from_err`.
-        PropagateError(Error),
 
         /// Must `break` with the value.
         Break(Break),

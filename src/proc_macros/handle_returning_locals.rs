@@ -74,6 +74,14 @@ fn handle_returning_locals (
                 done: bool,
             }
             impl VisitMut for AddExplicitReturns {
+                fn visit_item_mut (
+                    self: &'_ mut Self,
+                    _: &'_ mut Item,
+                )
+                {
+                    // Stop recursing.
+                }
+
                 fn visit_block_mut (
                     self: &'_ mut Self,
                     block: &'_ mut Block,
@@ -159,6 +167,14 @@ fn handle_returning_locals (
 
             // Then map `return <expr>` to `return cont(<expr>)`.
             struct ReturnMapper; impl VisitMut for ReturnMapper {
+                fn visit_item_mut (
+                    self: &'_ mut Self,
+                    _: &'_ mut Item,
+                )
+                {
+                    // Stop recursing.
+                }
+
                 fn visit_expr_mut (
                     self: &'_ mut Self,
                     expr: &'_ mut Expr,
