@@ -203,10 +203,7 @@ fn handle_returning_locals (
                             // recurse
                             self.visit_expr_mut(inner_expr);
                             *expr = parse_quote! {
-                                match #Try::into_result(
-                                    #inner_expr
-                                )
-                                {
+                                match #inner_expr { it => match #Try::into_result(it) {
                                     | #Result::Ok(it) => it,
                                     | #Result::Err(err) => {
                                         return __continuation__(
@@ -215,7 +212,7 @@ fn handle_returning_locals (
                                             )
                                         );
                                     },
-                                }
+                                }}
                             };
                         },
 

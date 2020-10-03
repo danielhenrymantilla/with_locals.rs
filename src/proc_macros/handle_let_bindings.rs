@@ -181,25 +181,32 @@ impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
                         (attrs, args, &mut at_last.ident)
                     },
 
-                    | Expr::Try(ExprTry {
-                        ref mut attrs,
+                    | Expr::Match(ExprMatch {
                         ref mut expr,
-                        ref question_token,
+                        match_token: token::Match {
+                            span,
+                        },
+                        ..
+                    })
+                    | Expr::Try(ExprTry {
+                        ref mut expr,
+                        question_token: token::Question {
+                            spans: [span],
+                        },
+                        ..
                     }) => {
                         let anon = format_ident!(
                             "__with_locals_anon__",
-                            span = question_token.span(),
+                            span = span,
                         );
+                        let expr = mem::replace(expr, parse_quote! {
+                            #anon
+                        });
                         stmts_after_with_let.push_front(parse_quote! {
-                            let #binding = #anon #question_token;
+                            let #binding = #call;
                         });
                         binding = parse_quote!( #anon );
-                        if let Some(extraneous) = attrs.first() {
-                            throw!(extraneous.span() =>
-                                "`#[with]` does not support attributes"
-                            );
-                        }
-                        call = mem::replace(expr, parse_quote!(()));
+                        call = *expr;
                         continue;
                     },
 

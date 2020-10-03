@@ -117,6 +117,8 @@ const _: () = {
         fn options ()
           -> Option<Option<Option<&'ref ()>>>
         {
+            #[with]
+            let _it = options()???;
             None
         }
 
