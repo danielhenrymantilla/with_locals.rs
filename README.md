@@ -229,22 +229,24 @@ Something important to understand _w.r.t._ how `#[with]` operates, is that
 sometimes it must perform transformations (such as changing a `foo()` call into
 a `with_foo(...)` call), and sometimes it must not; it depends on the semantics
 the programmer wants to write (that is, not _all_ function calls rely on CPS!).
+
 Since _a procedural macro only operates on syntax_, it cannot understand such
 _semantics_ (_e.g._, it is not possible for a proc-macro to replace `foo()`
-with `with_foo()` if, and only if, `foo` does not exist). Because of that,
-**the macro expects some syntactic marker / hints that tell it when (and
-where!) to work**:
+with `with_foo()` if, and only if, `foo` does not exist).
 
- 1. Obviously, the attribute itself needs to have been applied,
+Because of that, **the macro expects some syntactic marker / hints that tell it
+when (and where!) to work**:
 
-    _on the enscoping function_:
+ 1. Obviously, the attribute itself needs to have been applied (_on the
+    enscoping function_):
 
     ```rust,ignore
     #[with('special)]
     fn ...
     ```
 
-      - If no override is provided, `#[with]` defaults to `#[with('ref)]`.
+      - Note: if no override is provided, `#[with]` defaults to
+        `#[with('ref)]`.
 
  1. Then, the macro will inspect to see if **there is a ["special lifetime"]
     within the return type of the function**.
@@ -260,7 +262,7 @@ where!) to work**:
     That will trigger the transformation of `fn foo` into `fn with_foo`, with
     all the taking-a-callback-parameter shenanigans.
 
-    Otherwise _it won't change the prototype of the function_.
+    **Otherwise, it doesn't change the prototype of the function**.
 
  1. Finally, the macro will also inspect the function body, to perform the
     call-site transformations (_e.g._, `let x = foo(...)` into
@@ -304,9 +306,12 @@ If you are well acquainted with all this CPS / callback style, and would just
 like to have some sugar when defining callback-based functions, but do not want
 the attribute to mess up with the code inside the function body (_i.e._, if
 you want to opt-out of the magic continuation calls at `return` sites _& co._),
-for instance, because you are interacting with other macros (since they lead to
-opaque code as far as `#[with]` is concerned, making it unable to "fix" the
-code inside, which may lead to uncompilable code), then, know that you can:
+
+  - for instance, because you are interacting with other macros (since they
+    lead to opaque code as far as `#[with]` is concerned, making it unable to
+    "fix" the code inside, which may lead to uncompilable code),
+
+then, know that you can:
 
   - directly call the `with_foo(...)` functions with hand-written closures.
 
@@ -318,11 +323,13 @@ code inside, which may lead to uncompilable code), then, know that you can:
     transformations;
 
       - Note that `#[with]` will then provide a `some_identifier!` macro that
-        can be used as a shorthand for `return some_identifier(...)`. This is
-        especially neat if the identifier used is, for instance, `return_`.
-        You can then write `return_! { value }` where a classic function would
-        have written `return value`, and it will correctly expand to
-        `return return_(value)` (return the value returned by the continuation).
+        can be used as a shorthand for `return some_identifier(...)`.
+
+        This can be especially neat if the identifier used is, for instance,
+        `return_`: you can then write `return_!( value )` where a classic
+        function would have written `return value`, and it will correctly
+        expand to `return return_(value)` (return the value returned by the
+        continuation).
 
 #### Example
 
@@ -411,7 +418,13 @@ fn main ()
 
     ```rust,ignore
     for n in 0 .. {
-        use ::with_locals::...::ControlFlow; // helper `enum`.
+        enum ControlFlow<T> {
+            /// The statements evaluated to a value of type `T`.
+            Eval(T),
+
+            /// The statements "called" `break`.
+            Break,
+        }
 
         match with_hex(n, |s| ControlFlow::Eval({
             println!("{}", s);
