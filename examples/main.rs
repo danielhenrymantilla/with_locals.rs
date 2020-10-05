@@ -235,7 +235,7 @@ fn roman (mut n: u8) -> &'ref str
 #[with]
 fn romans ()
 {
-    for n in 1 ..= u8::MAX {
+    for n in 1 ..= ::core::u8::MAX {
         let s: &'ref str = roman(n);
         println!("{:3} = {}", n, s);
     }

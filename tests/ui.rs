@@ -5,18 +5,6 @@ fn trybuild ()
         ::std::path::Path::new("tests")
             .join("ui")
     ;
-    ::trybuild::TestCases::new()
-        .compile_fail(
-            tests_ui
-                .join("fail/*.rs")
-        )
-    ;
-    ::trybuild::TestCases::new()
-        .pass(
-            tests_ui
-                .join("pass/*.rs")
-        )
-    ;
     let nightly = {
         fn _it () -> bool
         {
@@ -30,6 +18,24 @@ fn trybuild ()
             _it()
         }
     };
+    ::trybuild::TestCases::new()
+        .pass(
+            tests_ui
+                .join("pass/*.rs")
+        )
+    ;
+    if nightly {
+        ::trybuild::TestCases::new()
+            .pass(
+                tests_ui
+                    .join("pass")
+                    .join("nightly/*.rs")
+            )
+        ;
+    }
+    if ::std::env::var("CI_SKIP_UI_TESTS").ok().map_or(false, |s| s == "1") {
+        return;
+    }
     if nightly {
         ::trybuild::TestCases::new()
             .compile_fail(
@@ -38,12 +44,12 @@ fn trybuild ()
                     .join("nightly/*.rs")
             )
         ;
+    } else {
         ::trybuild::TestCases::new()
-            .pass(
+            .compile_fail(
                 tests_ui
-                    .join("pass")
-                    .join("nightly/*.rs")
+                    .join("fail/*.rs")
             )
         ;
-    };
+    }
 }

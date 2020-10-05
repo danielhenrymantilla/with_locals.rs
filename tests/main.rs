@@ -110,14 +110,20 @@ mod to_str {
         }
 
         let ref mut out = String::new();
-        for n in 1 ..= u8::MAX {
+        for n in 1 ..= ::core::u8::MAX {
             use ::core::fmt::Write;
 
             #[with]
             let roman = Roman(n).to_str();
             writeln!(out, "{:3} = {}", n, roman).unwrap();
         }
-        assert_eq!(out, include_str!("romans.txt"));
+        assert_eq!(
+            out.as_str(),
+            include_str!("romans.txt")
+                .replace("\r\n", "\n")
+                .as_str()
+            ,
+        );
     }
 }
 

@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  # == CHECK == #
+  check:
+    name: Check nightly beta stable and MSRV
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust-toolchains:
+          - 1.40.0
+          - stable
+          - beta
+    steps:
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust-toolchains }}
+          override: true
+
+      - name: Clone repo
+        uses: actions/checkout@v2
+
+      - name: Cargo check
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+
+  # == BUILD & TEST == #
+  build-and-test:
+    name: Build and test
+    runs-on: ${{ matrix.os }}
+    needs: [check]
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+        rust-toolchains:
+          - 1.40.0
+          - stable
+    steps:
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: default
+          override: true
+          toolchain: ${{ matrix.rust-toolchains }}
+
+      - name: Clone repo
+        uses: actions/checkout@v2
+
+      - name: Cargo test (no UI)
+        uses: actions-rs/cargo@v1
+        env:
+          RUSTC_BOOTSTRAP: "1"
+          CI_SKIP_UI_TESTS: "1"
+        with:
+          command: test
+          args: --features nightly
+
+  # == UI TESTS ==
+  ui-test:
+    name: UI Tests on MSRV
+    runs-on: ubuntu-latest
+    needs: [build-and-test]
+    strategy:
+      fail-fast: false
+      matrix:
+        nightly: ["0", "1"]
+    steps:
+        - name: Install Rust toolchain
+          uses: actions-rs/toolchain@v1
+          with:
+            profile: default
+            override: true
+            toolchain: 1.40.0
+
+        - name: Clone repo
+          uses: actions/checkout@v2
+
+        - name: Cargo UI test
+          uses: actions-rs/cargo@v1
+          env:
+            RUSTC_BOOTSTRAP: ${{ matrix.nightly }}
+          with:
+            command: test
+            args: -- trybuild

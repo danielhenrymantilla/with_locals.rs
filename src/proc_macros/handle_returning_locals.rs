@@ -247,11 +247,12 @@ fn handle_returning_locals (
         proc_macro_use! {
             use $krate::{Option};
         }
-        *block = parse_quote!({
-            // Some user-provided code patterns, once transformed, may scare
-            // Rust into thinking we are calling an `FnOnce()` multiple times.
-            // Since that _shouldn't_ be the case, we defer to a runtime check,
-            // hoping that, in practice, it will end up being optimized away.
+        let mut block_prefix = quote! {
+            /// Some user-provided code patterns, once transformed, may scare
+            /// Rust into thinking we are calling an `FnOnce()` multiple times.
+            /// Since that _shouldn't_ be the case, we defer to a runtime check,
+            /// hoping that, in practice, it will end up being optimized away.
+            extern {}
             let mut #continuation_name = {
                 let mut #continuation_name =
                     #Option::Some(#continuation_name)
@@ -260,11 +261,19 @@ fn handle_returning_locals (
                     #continuation_name.take().unwrap()(__ret__)
                 }
             };
-            macro_rules! #continuation_name { ($expr:expr) => (
-                match $expr { __ret__ => {
-                    return #continuation_name(__ret__);
-                }}
-            )}
+        };
+        if continuation.is_some() {
+            // Requires Rust 1.40.0
+            block_prefix.extend(quote! {
+                macro_rules! #continuation_name { ($expr:expr) => (
+                    match $expr { __ret__ => {
+                        return #continuation_name(__ret__);
+                    }}
+                )}
+            });
+        }
+        *block = parse_quote!({
+            #block_prefix
             #block
         });
     }
