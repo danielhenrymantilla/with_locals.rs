@@ -110,7 +110,7 @@ mod to_str {
         }
 
         let ref mut out = String::new();
-        for n in 1 ..= u8::MAX {
+        for n in 1 ..= ::core::u8::MAX {
             use ::core::fmt::Write;
 
             #[with]
