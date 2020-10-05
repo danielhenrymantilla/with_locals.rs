@@ -166,7 +166,7 @@ fn wrap_statements_inside_closure_body (
                         // we do generate an *inner* `return` expression:
                         self.visit_expr_mut(matchee);
                         *expr = parse_quote! {
-                            match #Try::into_result(#matchee) {
+                            match #matchee { it => match #Try::into_result(it) {
                                 | #Result::Ok(it) => it,
                                 | #Result::Err(err) => {
                                     return #ControlFlow::EarlyReturn(
@@ -175,7 +175,7 @@ fn wrap_statements_inside_closure_body (
                                         )
                                     );
                                 },
-                            }
+                            }}
                         };
                         // do not subrecurse now
                         return;

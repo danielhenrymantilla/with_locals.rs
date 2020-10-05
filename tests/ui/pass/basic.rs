@@ -127,6 +127,8 @@ const _: () = {
 
         #[with]
         let _it = options()???;
+        #[with]
+        let _snd = options()?;
         None
     }
 };
