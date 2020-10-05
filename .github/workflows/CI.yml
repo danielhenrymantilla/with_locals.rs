@@ -5,8 +5,6 @@ on:
     branches:
       - master
   pull_request:
-  schedule:
-    - cron: '0 8 * * 1,5'
 
 jobs:
   # == CHECK == #
@@ -19,7 +17,6 @@ jobs:
           - 1.40.0
           - stable
           - beta
-          - nightly
     steps:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -51,8 +48,6 @@ jobs:
         rust-toolchains:
           - 1.40.0
           - stable
-          - beta
-          - nightly
     steps:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
