@@ -6,6 +6,7 @@
 [![MSRV](https://img.shields.io/badge/MSRV-1.40.0-white)](https://gist.github.com/danielhenrymantilla/8e5b721b3929084562f8f65668920c33)
 [![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
 [![License](https://img.shields.io/crates/l/with_locals.svg)](https://github.com/danielhenrymantilla/with_locals.rs/blob/master/LICENSE)
+[![CI](https://github.com/danielhenrymantilla/with_locals.rs/workflows/CI/badge.svg)](https://github.com/danielhenrymantilla/with_locals.rs/actions)
 
 ### CPS sugar in Rust, to "return" values referring to locals.
 

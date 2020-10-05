@@ -1,4 +1,4 @@
-name: CI
+name: Cron CI
 
 on:
   push:
@@ -12,7 +12,6 @@ jobs:
   test-no-ui:
     name: (Check & Build &) Test (No UI)
     runs-on: ${{ matrix.os }}
-    needs: [check]
     strategy:
       fail-fast: false
       matrix:
