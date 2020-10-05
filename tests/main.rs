@@ -219,3 +219,20 @@ fn loops ()
     ```
     */
 }
+
+#[test]
+#[with]
+fn recursive ()
+{
+    /// Recursive
+    #[with(recursive = true)]
+    fn recursive (recurse: bool) -> &'ref ()
+    {
+        if recurse {
+            let _: &'ref _ = recursive(false);
+        }
+        &()
+    }
+    #[with(recursive)]
+    let _it: &'ref () = recursive(true);
+}

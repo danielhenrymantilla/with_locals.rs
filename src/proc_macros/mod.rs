@@ -15,9 +15,9 @@ use ::quote::{
 };
 use ::syn::{*,
     parse::{
-        Nothing,
+        // Nothing,
         Parse,
-        // Parser,
+        Parser,
         ParseStream,
     },
     // punctuated::Punctuated,
@@ -54,6 +54,7 @@ type Str = ::std::borrow::Cow<'static, str>;
 struct Attrs {
     lifetime: Str,
     continuation: Option<Ident>,
+    recursive: bool,
 }
 
 /// See [the main documentation of the crate for info about this attribute](

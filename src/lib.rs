@@ -34,8 +34,11 @@ mod __ {
     pub
     use ::core::{
         convert::Into,
-        option::Option,
-        result::Result,
+        ops::{
+            FnMut, FnOnce,
+        },
+        option::Option::{Some as Some_},
+        result::Result::{Ok as Ok_, Err as Err_},
     };
 
     pub
@@ -82,7 +85,8 @@ mod __ {
         }
     }
 
-    pub struct NoneError;
+    mod hidden { pub struct NoneError; }
+    use hidden::NoneError;
 
     impl<T> Try for Option<T> {
         type Ok = T;

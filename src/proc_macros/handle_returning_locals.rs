@@ -1,6 +1,6 @@
 fn handle_returning_locals (
     fun: &'_ mut Input,
-    &Attrs { ref lifetime, ref continuation }: &'_ Attrs,
+    &Attrs { ref lifetime, ref continuation, recursive }: &'_ Attrs,
 )
 {
     let continuation_name =
@@ -54,14 +54,25 @@ fn handle_returning_locals (
             | ReturnType::Default => unreachable!(),
         }
     ;
-    generics.params.push(parse_quote! {
-        __Continuation__ /* F */
-        :
-        // for<#(#lifetimes),*>
-        ::core::ops::FnOnce(#ret) -> __Continuation_Return__
-    });
-    inputs.push(parse_quote! {
-        #continuation_name : __Continuation__
+    proc_macro_use! {
+        use $krate::{FnMut, FnOnce};
+    }
+    inputs.push(if recursive.not () {
+        generics.params.push(parse_quote! {
+            __Continuation__ /* F */
+            :
+            // for<#(#lifetimes),*>
+            #FnOnce(#ret) -> __Continuation_Return__
+        });
+        parse_quote! {
+            #continuation_name : __Continuation__
+        }
+    } else {
+        parse_quote! {
+            #continuation_name
+            :
+            &'_ mut (dyn '_ + #FnMut(#ret) -> __Continuation_Return__)
+        }
     });
     *ident = format_ident!("with_{}", ident);
     if let Some(&mut ref mut block) = *block {
@@ -183,7 +194,7 @@ fn handle_returning_locals (
                     proc_macro_use! {
                         use $krate::{
                             Into,
-                            Result,
+                            Ok_, Err_,
                             Try,
                         };
                     }
@@ -220,8 +231,8 @@ fn handle_returning_locals (
                             self.visit_expr_mut(inner_expr);
                             *expr = parse_quote! {
                                 match #inner_expr { it => match #Try::into_result(it) {
-                                    | #Result::Ok(it) => it,
-                                    | #Result::Err(err) => {
+                                    | #Ok_(it) => it,
+                                    | #Err_(err) => {
                                         return __continuation__(
                                             #Try::from_err(
                                                 #Into::into(err)
@@ -245,9 +256,9 @@ fn handle_returning_locals (
             #[allow(unreachable_code, unused_braces)]
         });
         proc_macro_use! {
-            use $krate::{Option};
+            use $krate::{Some_};
         }
-        let mut block_prefix = quote! {
+        let mut block_prefix = if recursive { quote!() } else { quote! {
             /// Some user-provided code patterns, once transformed, may scare
             /// Rust into thinking we are calling an `FnOnce()` multiple times.
             /// Since that _shouldn't_ be the case, we defer to a runtime check,
@@ -255,13 +266,13 @@ fn handle_returning_locals (
             extern {}
             let mut #continuation_name = {
                 let mut #continuation_name =
-                    #Option::Some(#continuation_name)
+                    #Some_(#continuation_name)
                 ;
                 move |__ret__: #ret| {
                     #continuation_name.take().unwrap()(__ret__)
                 }
             };
-        };
+        }};
         if continuation.is_some() {
             // Requires Rust 1.40.0
             block_prefix.extend(quote! {

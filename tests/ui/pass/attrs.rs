@@ -64,6 +64,16 @@ fn foo ()
     with(&())
 }
 
+/// Recursive
+#[with(recursive = true)]
+fn rec (recurse: bool) -> &'ref ()
+{
+    if recurse {
+        let _: &'ref _ = rec(false);
+    }
+    &()
+}
+
 /// Trailing commas
 const _: () = {
     const _: () = {
@@ -74,6 +84,48 @@ const _: () = {
     const _: () = {
         #[with(
             'some_name , continuation_name = whatever ,
+        )]
+        fn __ ()
+        {}
+    };
+    const _: () = {
+        #[with(
+            'some_name , recursive = true ,
+        )]
+        fn __ ()
+        {}
+    };
+    const _: () = {
+        #[with(
+            'some_name , continuation_name = whatever , recursive = false ,
+        )]
+        fn __ ()
+        {}
+    };
+    const _: () = {
+        #[with(
+            'some_name , recursive = false , continuation_name = whatever ,
+        )]
+        fn __ ()
+        {}
+    };
+    const _: () = {
+        #[with(
+            'some_name , continuation_name = whatever , recursive = false
+        )]
+        fn __ ()
+        {}
+    };
+    const _: () = {
+        #[with(
+            recursive = false , continuation_name = whatever
+        )]
+        fn __ ()
+        {}
+    };
+    const _: () = {
+        #[with(
+            continuation_name = whatever, recursive = false
         )]
         fn __ ()
         {}

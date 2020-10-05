@@ -17,13 +17,14 @@ pub(in super) use handle_let_bindings as f;
 pub(in super)
 fn handle_let_bindings (
     fun: &'_ mut Input,
-    &Attrs { ref lifetime, .. }: &'_ Attrs,
+    &Attrs { ref lifetime, recursive, .. }: &'_ Attrs,
 ) -> Result<()>
 {Ok({
     let mut encountered_error = None;
     let mut visitor = ReplaceLetBindingsWithCbCalls {
         encountered_error: &mut encountered_error,
         lifetime: &*lifetime,
+        recursive,
     };
     use ::std::panic;
     if let Err(panic) = panic::catch_unwind(panic::AssertUnwindSafe(|| {
@@ -51,6 +52,7 @@ fn handle_let_bindings (
 struct ReplaceLetBindingsWithCbCalls<'__> {
     encountered_error: &'__ mut Option<::syn::Error>,
     lifetime: &'__ str,
+    recursive: bool,
 }
 impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
     fn visit_item_mut (
@@ -71,17 +73,36 @@ impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
             throw! in self.encountered_error
         }
 
+        let orig_recursive = self.recursive;
         let with_idx = (0 ..).zip(&mut block.stmts).find_map(|(i, stmt)| {
             // `( #[with] )? let <binding> (: <ty>)? = <expr>;`
             if let Stmt::Local(ref mut let_binding) = *stmt {
                 let mut has_with = false;
+                let parser = |input: ParseStream<'_>| {
+                    match (|| Ok({
+                        let content;
+                        parenthesized!(content in input);
+                        content
+                    }))()
+                    {
+                        | Err(_) => {
+                            Ok(None)
+                        },
+                        | Ok(content) => {
+                            mod kw { ::syn::custom_keyword!(recursive); }
+                            content.parse::<Option<kw::recursive>>()
+                        },
+                    }
+                };
                 let_binding.attrs.retain(|attr| {
                     if attr.path.is_ident("with") {
                         has_with = true;
-                        if let Err(err) =
-                            ::syn::parse2::<Nothing>(attr.tokens.clone())
-                        {
-                            panic!(*self.encountered_error = Some(err));
+                        match parser.parse2(attr.tokens.clone()) {
+                            Ok(Some(_)) => self.recursive = true,
+                            Ok(None) => {},
+                            Err(err) => {
+                                panic!(*self.encountered_error = Some(err));
+                            },
                         }
                         false // remove attr
                     } else {
@@ -255,13 +276,25 @@ impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
                         },
                     }
             ;
-            // args: append the continuation
-            args.push(parse_quote! {
-                | #binding | #closure_body
-            });
+
             proc_macro_use! {
-                use $krate::{ControlFlow};
+                use $krate::{ControlFlow, Some_};
             }
+
+            // args: append the continuation
+            let continuation = quote! {
+                | #binding | #closure_body
+            };
+            args.push(if self.recursive.not() {
+                parse_quote!( #continuation )
+            } else {
+                parse_quote! {
+                    &mut {
+                        let mut closure = #Some_(#continuation);
+                        move |ret: _| closure.take().unwrap()(ret)
+                    }
+                }
+            });
             block.stmts.push(Stmt::Expr(parse_quote! {
                 match #call {
                     | #ControlFlow::Eval(it) => it,
@@ -271,6 +304,7 @@ impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
                 }
             }));
         }
+        self.recursive = orig_recursive;
         // sub-recurse.
         block
             .stmts
