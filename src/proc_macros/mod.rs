@@ -70,8 +70,8 @@ fn with (
         parse_macro_input!(input as Input),
     );
 
-    handle_returning_locals(&mut *fun, attrs);
-    if let Err(err) = handle_let_bindings::f(&mut *fun, attrs) {
+    let ty = handle_returning_locals(&mut *fun, attrs);
+    if let Err(err) = handle_let_bindings::f(&mut *fun, attrs, ty) {
         return err.to_compile_error().into();
     }
 

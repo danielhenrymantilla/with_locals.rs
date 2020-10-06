@@ -37,7 +37,7 @@ mod __ {
         ops::{
             FnMut, FnOnce,
         },
-        option::Option::{Some as Some_},
+        option::Option::{Some as Some_, None as None_},
         result::Result::{Ok as Ok_, Err as Err_},
     };
 

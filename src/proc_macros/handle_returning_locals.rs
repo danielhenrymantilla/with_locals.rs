@@ -1,7 +1,7 @@
 fn handle_returning_locals (
     fun: &'_ mut Input,
     &Attrs { ref lifetime, ref continuation, recursive }: &'_ Attrs,
-)
+) -> Option<Type>
 {
     let continuation_name =
         if let Some(ref continuation_name) = continuation {
@@ -14,7 +14,7 @@ fn handle_returning_locals (
     let ret_ty =
         if let ReturnType::Type(_, ref mut it) = fun.sig.output { it } else {
             // Nothing to do
-            return;
+            return None;
         }
     ;
     let mut lifetimes = vec![]; {
@@ -24,7 +24,7 @@ fn handle_returning_locals (
     }
     if lifetimes.is_empty() {
         // Nothing to do
-        return;
+        return None;
     }
 
     // By now, there is at least one `'self` occurence in the return type:
@@ -41,13 +41,27 @@ fn handle_returning_locals (
         .. } = {fun}
     ;
     // Add the <R, F : FnOnce(OutputReferringToLocals) -> R> generic params.
-    generics.params.push(parse_quote! {
-        __Continuation_Return__ /* R */
-    });
+    #[allow(nonstandard_style)]
+    let R = if recursive {
+        // For the recursive case, since our closure may return a wrapped `R`
+        // (such as `ControlFlow<R, ...>`), this leads to an infinitely
+        // recursive type when Rust tries to instanciate an actual `R`.
+        //
+        // The solution? Do not support that `R` parameter anymore; "returning"
+        // a value can also be done through a mutably-captured `Option<R>`
+        // "out" slot, which will get type-erased by `dyn FnMut`...
+        quote! { () }
+    } else {
+        let it = quote! {
+            __Continuation_Return__
+        };
+        generics.params.push(parse_quote!( #it ));
+        it
+    };
     let ret =
         match
             ::core::mem::replace(output, parse_quote! {
-              -> __Continuation_Return__
+              -> #R
             })
         {
             | ReturnType::Type(_, ty) => *ty,
@@ -71,7 +85,7 @@ fn handle_returning_locals (
         parse_quote! {
             #continuation_name
             :
-            &'_ mut (dyn '_ + #FnMut(#ret) -> __Continuation_Return__)
+            &'_ mut (dyn '_ + #FnMut(#ret) -> #R)
         }
     });
     *ident = format_ident!("with_{}", ident);
@@ -253,7 +267,12 @@ fn handle_returning_locals (
             ReturnMapper.visit_block_mut(block);
         }
         attrs.push(parse_quote! {
-            #[allow(unreachable_code, unused_braces)]
+            #[allow(
+                nonstandard_style,
+                unreachable_code,
+                unused_braces,
+                unused_parens,
+            )]
         });
         proc_macro_use! {
             use $krate::{Some_};
@@ -288,4 +307,5 @@ fn handle_returning_locals (
             #block
         });
     }
+    Some(ret)
 }

@@ -233,6 +233,6 @@ fn recursive ()
         }
         &()
     }
-    #[with(recursive)]
+    #[with(recursive = true)]
     let _it: &'ref () = recursive(true);
 }
