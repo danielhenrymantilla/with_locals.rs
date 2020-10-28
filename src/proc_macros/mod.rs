@@ -22,11 +22,12 @@ use ::syn::{*,
         Parser,
         ParseStream,
     },
-    // punctuated::Punctuated,
+    punctuated::Punctuated,
     spanned::Spanned,
-    Result,
     visit_mut::{self, VisitMut},
 };
+
+type Result<Ok, Err = Error> = ::core::result::Result<Ok, Err>;
 
 use ::core::{
     mem,

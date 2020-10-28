@@ -115,22 +115,28 @@ fn pretty_print_tokenstream (
     fn try_format (input: &'_ str)
       -> Option<String>
     {Some({
+        use ::std::{io::{Read, Write}, process};
         let mut child =
-            ::std::process::Command::new("rustfmt")
-                .stdin(::std::process::Stdio::piped())
-                .stdout(::std::process::Stdio::piped())
-                .stderr(::std::process::Stdio::piped())
+            process::Command::new("rustfmt")
+                .stdin(process::Stdio::piped())
+                .stdout(process::Stdio::piped())
+                .stderr(process::Stdio::piped())
                 .spawn()
                 .ok()?
         ;
         match child.stdin.take().unwrap() { ref mut stdin => {
-            ::std::io::Write::write_all(stdin, input.as_bytes()).ok()?;
+            stdin
+                .write_all(input.as_bytes())
+                .ok()?
+            ;
         }}
         let mut stdout = String::new();
-        ::std::io::Read::read_to_string(
-            &mut child.stdout.take().unwrap(),
-            &mut stdout,
-        ).ok()?;
+        child
+            .stdout
+            .take()?
+            .read_to_string(&mut stdout)
+            .ok()?
+        ;
         if child.wait().ok()?.success().not() { return None; }
         stdout
     })}
