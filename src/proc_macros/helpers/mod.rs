@@ -3,17 +3,6 @@ use super::*;
 #[macro_use]
 mod macros;
 
-impl ToTokens for Input {
-    fn to_tokens (self: &'_ Self, out: &'_ mut TokenStream2)
-    {
-        match *self {
-            | Input::ItemFn(ref inner) => inner.to_tokens(out),
-            | Input::TraitItemMethod(ref inner) => inner.to_tokens(out),
-            | Input::ImplItemMethod(ref inner) => inner.to_tokens(out),
-        }
-    }
-}
-
 pub (in super)
 struct LifetimeVisitor<'__> {
     pub (in super)
@@ -42,59 +31,76 @@ impl VisitMut for LifetimeVisitor<'_> {
     }
 }
 
-pub(in super)
+pub(in crate)
 struct Fields<'fun> {
-    pub(in super) attrs: &'fun mut Vec<Attribute>,
-    // pub(in super) vis: Option<&'fun mut Visibility>,
-    pub(in super) sig: &'fun mut Signature,
-    pub(in super) block: Option<&'fun mut Block>,
+    pub attrs: &'fun mut Vec<Attribute>,
+    // pub vis: Option<&'fun mut Visibility>,
+    pub sig: &'fun mut Signature,
+    pub block: Option<&'fun mut Block>,
 }
 
-impl Input {
-    pub(in super)
-    fn fields (self: &'_ mut Self) -> Fields<'_>
+pub(in crate)
+trait FnLike {
+    fn fields<'fun> (self: &'fun mut Self)
+      -> Fields<'fun>
+    ;
+}
+
+impl FnLike for ItemFn {
+    fn fields<'fun> (self: &'fun mut ItemFn)
+      -> Fields<'fun>
     {
-        match *self {
-            | Self::ItemFn(ItemFn {
-                ref mut attrs,
-                // ref mut vis,
-                ref mut sig,
-                ref mut block,
-                ..
-            })
-            => Fields {
-                attrs,
-                // vis: Some(vis),
-                sig,
-                block: Some(block),
-            },
+        let ItemFn {
+            ref mut attrs,
+            // ref mut vis,
+            ref mut sig,
+            ref mut block,
+            ..
+        } = *self;
+        Fields {
+            attrs,
+            // vis: Some(vis),
+            sig,
+            block: Some(block),
+        }
+    }
+}
 
-            | Self::ImplItemMethod(ImplItemMethod {
-                ref mut attrs,
-                // ref mut vis,
-                ref mut sig,
-                ref mut block,
-                ..
-            })
-            => Fields {
-                attrs,
-                // vis: Some(vis),
-                sig,
-                block: Some(block),
-            },
+impl FnLike for ImplItemMethod {
+    fn fields<'fun> (self: &'fun mut ImplItemMethod)
+      -> Fields<'fun>
+    {
+        let ImplItemMethod {
+            ref mut attrs,
+            // ref mut vis,
+            ref mut sig,
+            ref mut block,
+            ..
+        } = *self;
+        Fields {
+            attrs,
+            // vis: Some(vis),
+            sig,
+            block: Some(block),
+        }
+    }
+}
 
-            | Self::TraitItemMethod(TraitItemMethod {
-                ref mut attrs,
-                ref mut sig,
-                default: ref mut block,
-                ..
-            })
-            => Fields {
-                attrs,
-                // vis: None,
-                sig,
-                block: block.as_mut(),
-            },
+impl FnLike for TraitItemMethod {
+    fn fields<'fun> (self: &'fun mut TraitItemMethod)
+      -> Fields<'fun>
+    {
+        let TraitItemMethod {
+            ref mut attrs,
+            ref mut sig,
+            default: ref mut block,
+            ..
+        } = *self;
+        Fields {
+            attrs,
+            // vis: None,
+            sig,
+            block: block.as_mut(),
         }
     }
 }
@@ -103,7 +109,7 @@ impl Input {
 pub(in super)
 fn pretty_print_tokenstream (
     code: &'_ TokenStream2,
-    fname: &'_ Ident,
+    fname: &'_ str,
 )
 {
     fn try_format (input: &'_ str)
@@ -131,11 +137,7 @@ fn pretty_print_tokenstream (
 
     if  ::std::env::var("WITH_LOCALS_DEBUG_FILTER")
             .ok()
-            .map_or(true, |ref filter| {
-                fname
-                    .to_string()
-                    .contains(filter)
-            })
+            .map_or(true, |ref filter| fname.contains(filter))
     {
         if let Some(ref formatted) = try_format(&code.to_string()) {
             // It's formatted, now let's try to also colorize it:

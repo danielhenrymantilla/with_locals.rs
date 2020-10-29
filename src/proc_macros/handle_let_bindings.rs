@@ -16,31 +16,18 @@ pub(in super) use handle_let_bindings as f;
 /// ```
 pub(in super)
 fn handle_let_bindings (
-    fun: &'_ mut Input,
-    &Attrs { ref lifetime, recursive, .. }: &'_ Attrs,
-    ret_ty: Option<Type>,
+    block: &'_ mut Block,
+    &Attrs { ref lifetime, .. }: &'_ Attrs,
 ) -> Result<()>
 {Ok({
     let mut encountered_error = None;
     let mut visitor = ReplaceLetBindingsWithCbCalls {
         encountered_error: &mut encountered_error,
         lifetime: &*lifetime,
-        recursive,
-        ret_ty,
     };
     use ::std::panic;
     if let Err(panic) = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-        match *fun {
-            | Input::ItemFn(ref mut it) => {
-                visitor.visit_item_fn_mut(it);
-            },
-            | Input::TraitItemMethod(ref mut it) => {
-                visitor.visit_trait_item_method_mut(it);
-            },
-            | Input::ImplItemMethod(ref mut it) => {
-                visitor.visit_impl_item_method_mut(it);
-            },
-        }
+        visitor.visit_block_mut(block)
     }))
     {
         if let Some(err) = encountered_error {
@@ -54,8 +41,6 @@ fn handle_let_bindings (
 struct ReplaceLetBindingsWithCbCalls<'__> {
     encountered_error: &'__ mut Option<::syn::Error>,
     lifetime: &'__ str,
-    recursive: bool,
-    ret_ty: Option<Type>,
 }
 impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
     fn visit_item_mut (
@@ -76,46 +61,17 @@ impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
             throw! in self.encountered_error
         }
 
-        let orig_recursive = self.recursive;
         let with_idx = (0 ..).zip(&mut block.stmts).find_map(|(i, stmt)| {
             // `( #[with] )? let <binding> (: <ty>)? = <expr>;`
             if let Stmt::Local(ref mut let_binding) = *stmt {
                 let mut has_with = false;
-                let parser = |input: ParseStream<'_>| {
-                    match (|| Ok({
-                        let content;
-                        parenthesized!(content in input);
-                        content
-                    }))()
-                    {
-                        | Err(_) => {
-                            Ok(None)
-                        },
-                        | Ok(content) => {
-                            mod kw { ::syn::custom_keyword!(recursive); }
-                            Ok(if  content
-                                    .parse::<Option<kw::recursive>>()?
-                                    .is_some()
-                            {
-                                let _: Token![=] = content.parse()?;
-                                let lit_bool: LitBool = content.parse()?;
-                                let _: Option<Token![,]> = content.parse()?;
-                                Some(lit_bool.value)
-                            } else {
-                                None
-                            })
-                        },
-                    }
-                };
                 let_binding.attrs.retain(|attr| {
                     if attr.path.is_ident("with") {
                         has_with = true;
-                        match parser.parse2(attr.tokens.clone()) {
-                            Ok(Some(recursive)) => self.recursive = recursive,
-                            Ok(None) => {},
-                            Err(err) => {
-                                panic!(*self.encountered_error = Some(err));
-                            },
+                        if let Err(err) =
+                            ::syn::parse2::<Nothing>(attr.tokens.clone())
+                        {
+                            panic!(*self.encountered_error = Some(err));
                         }
                         false // remove attr
                     } else {
@@ -291,62 +247,13 @@ impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
             ;
 
             proc_macro_use! {
-                use $krate::{ControlFlow, Some_};
+                use $krate::{ControlFlow};
             }
 
             // args: append the continuation
-            args.push(if self.recursive.not() {
-                parse_quote! {
-                    |#binding| #closure_body
-                }
-            } else {
-                let storage;
-                let ret_ty =
-                    if let Some(ref ty) = self.ret_ty {
-                        // fill the `binding` with the known type annotation.
-                        match binding {
-                            | Pat::Type(ref mut it) => *it.ty = ty.clone(),
-                            | _ => {
-                                // `parse_quote! { #binding: #ty }` does not
-                                // work for some reason…
-                                binding = Pat::Type(PatType {
-                                    attrs: vec![],
-                                    pat: Box::new(binding),
-                                    colon_token: Default::default(),
-                                    ty: Box::new(ty.clone()),
-                                });
-                            },
-                        }
-                        ty
-                    } else {
-                        storage = parse_quote! { _ };
-                        &storage
-                    }
-                ;
-                parse_quote! {
-                    &mut {
-                        let mut closure = #Some_(|#binding| #closure_body);
-                        move |ret: #ret_ty| -> () {
-                            __with_locals_ret_slot__.replace(
-                                closure.take().unwrap()(ret)
-                            );
-                        }
-                    }
-                }
-            });
-            if self.recursive {
-                proc_macro_use! {
-                    use $krate::{None_};
-                }
-                call = parse_quote!({
-                    let mut __with_locals_ret_slot__ = #None_;
-                    let () = {
-                        let __with_locals_ret_slot__ = &mut __with_locals_ret_slot__;
-                        #call
-                    };
-                    __with_locals_ret_slot__.unwrap()
-                });
-            }
+            args.push(parse_quote!(
+                |#binding| #closure_body
+            ));
             block.stmts.push(Stmt::Expr(parse_quote! {
                 match #call {
                     | #ControlFlow::Eval(it) => it,
@@ -356,7 +263,6 @@ impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
                 }
             }));
         }
-        self.recursive = orig_recursive;
         // sub-recurse.
         block
             .stmts

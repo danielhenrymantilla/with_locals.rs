@@ -1,41 +1,41 @@
-error: expected `fn`
-  --> $DIR/bad_items.rs:31:5
+error: `#[with]` can only be applied to an `fn`, a `trait`, or an `impl`.
+  --> $DIR/bad_items.rs:30:5
    |
-31 |     union __ {}
-   |     ^^^^^
+30 |     #[with]
+   |     ^^^^^^^
 
-error: expected `fn`
-  --> $DIR/bad_items.rs:26:5
+error: `#[with]` can only be applied to an `fn`, a `trait`, or an `impl`.
+  --> $DIR/bad_items.rs:25:5
    |
-26 |     enum __ {}
-   |     ^^^^
+25 |     #[with]
+   |     ^^^^^^^
 
-error: expected `fn`
-  --> $DIR/bad_items.rs:21:5
+error: `#[with]` can only be applied to an `fn`, a `trait`, or an `impl`.
+  --> $DIR/bad_items.rs:20:5
    |
-21 |     struct __ {}
-   |     ^^^^^^
+20 |     #[with]
+   |     ^^^^^^^
 
-error: expected `fn`
-  --> $DIR/bad_items.rs:16:5
+error: `#[with]` can only be applied to an `fn`, a `trait`, or an `impl`.
+  --> $DIR/bad_items.rs:15:5
    |
-16 |     type __ = ();
-   |     ^^^^
+15 |     #[with]
+   |     ^^^^^^^
 
-error: expected `fn`
-  --> $DIR/bad_items.rs:11:5
+error: `#[with]` can only be applied to an `fn`, a `trait`, or an `impl`.
+  --> $DIR/bad_items.rs:10:5
    |
-11 |     static __: () = {};
-   |     ^^^^^^
+10 |     #[with]
+   |     ^^^^^^^
 
-error: expected `fn`
- --> $DIR/bad_items.rs:7:7
+error: `#[with]` can only be applied to an `fn`, a `trait`, or an `impl`.
+ --> $DIR/bad_items.rs:6:1
   |
-7 | const _: () = {};
-  |       ^
+6 | #[with]
+  | ^^^^^^^
 
-error: expected `fn`
- --> $DIR/bad_items.rs:4:1
+error: `#[with]` can only be applied to an `fn`, a `trait`, or an `impl`.
+ --> $DIR/bad_items.rs:3:1
   |
-4 | use self;
-  | ^^^
+3 | #[with]
+  | ^^^^^^^

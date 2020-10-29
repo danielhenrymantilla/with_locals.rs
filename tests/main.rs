@@ -221,18 +221,17 @@ fn loops ()
 }
 
 #[test]
-#[with]
+#[with('ref)]
 fn recursive ()
 {
     /// Recursive
     #[with(recursive = true)]
-    fn recursive (recurse: bool) -> &'ref ()
+    fn recursive_f (recurse: bool) -> &'ref ()
     {
         if recurse {
-            let _: &'ref _ = recursive(false);
+            let _: &'ref _ = recursive_f(false);
         }
         &()
     }
-    #[with(recursive = true)]
-    let _it: &'ref () = recursive(true);
+    let _it: &'ref () = recursive_f(true);
 }
