@@ -3,12 +3,12 @@ use super::*;
 #[macro_use]
 mod macros;
 
-pub (in super)
+pub(in crate)
 struct LifetimeVisitor<'__> {
-    pub (in super)
+    pub(in crate)
     lifetime: &'__ str,
 
-    pub (in super)
+    pub(in crate)
     lifetimes: &'__ mut Vec<(/*Lifetime*/)>,
 }
 
@@ -106,7 +106,7 @@ impl FnLike for TraitItemMethod {
 }
 
 #[cfg(feature = "expand-macros")]
-pub(in super)
+pub(in crate)
 fn pretty_print_tokenstream (
     code: &'_ TokenStream2,
     fname: &'_ str,

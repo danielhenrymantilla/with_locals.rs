@@ -10,6 +10,19 @@ extern crate proc_macros;
 
 pub use ::proc_macros::with;
 
+/// For advanced users that manually write the `with` closure of `dyn_safe`
+/// function.
+pub
+mod dyn_safe {
+    /// Used to manually call `#[with(dyn_safe = true)]` functions.
+    ///
+    /// They need a fixed / non-generic return type, but using `()` would be
+    /// error-prone when manually implementing such `with` functions. Using
+    /// this is thus more type-safe.
+    pub
+    struct ContinuationReturn;
+}
+
 #[doc(hidden)] /** Not part of the public API **/ pub
 mod __ {
     pub

@@ -4,7 +4,26 @@ fn handle_returning_locals (
     outer_scope: Option<(&'_ Generics, ::func_wrap::ImplOrTrait<'_>)>,
 ) -> Result<()>
 {Ok({
-    let &Attrs { ref lifetime, ref continuation, recursive } = with_attrs;
+    let     &Attrs {
+        ref lifetime,
+        ref continuation,
+        dyn_safe,
+        recursive,
+            } = with_attrs
+    ;
+    fun.fields().attrs.push(parse_quote! {
+        #[allow(
+            nonstandard_style,
+            unreachable_code,
+            unused_braces,
+            unused_parens,
+        )]
+    });
+    let not_dyn_safe = dyn_safe.not();
+    // Note: currently, the necessary `dyn`-safe transformations also allow
+    // preventing the recursive function issue, so no need to apply any extra
+    // transformations.
+    let recursive = recursive && not_dyn_safe;
     let continuation_name =
         if let Some(ref continuation_name) = continuation {
             format_ident!("{}", continuation_name)
@@ -32,37 +51,52 @@ fn handle_returning_locals (
     // By now, there is at least one `'self` occurence in the return type:
     // transform the whole function into one using the `with_` continuation
     // pattern.
-    let __ { attrs, sig, block, .. } = fun;
+    let __ { sig, block, .. } = fun;
     let &mut Signature {
         ref mut ident,
         ref mut inputs,
         ref mut output,
         ref mut generics, .. } = sig;
     // Add the <R, F : FnOnce(OutputReferringToLocals) -> R> generic params.
-    generics.params.push(parse_quote!(
-        __Continuation_Return__ /* R */
-    ));
+    // (Or use the `dyn`-safe equivalent).
+    let R = if not_dyn_safe {
+        let new_ty_param = quote!(
+            __Continuation_Return__
+        );
+        generics.params.push(parse_quote!( #new_ty_param ));
+        new_ty_param
+    } else {
+        quote!(
+            ::with_locals::dyn_safe::ContinuationReturn
+        )
+    };
     let ret =
-        match
-            ::core::mem::replace(output, parse_quote! {
-              -> __Continuation_Return__
-            })
-        {
+        match ::core::mem::replace(output, parse_quote!( -> #R )) {
             | ReturnType::Type(_, ty) => *ty,
             | ReturnType::Default => unreachable!(),
         }
     ;
     proc_macro_use! {
-        use $krate::{FnOnce};
+        use $krate::{FnMut, FnOnce};
     }
-    generics.params.push(parse_quote! {
-        __Continuation__ /* F */
-        :
-        // for<#(#lifetimes),*>
-        #FnOnce(#ret) -> __Continuation_Return__
-    });
+    let F = if not_dyn_safe {
+        let new_ty_param = quote!(
+            __Continuation__
+        );
+        generics.params.push(parse_quote! {
+            #new_ty_param
+            :
+            // for<#(#lifetimes),*>
+            #FnOnce(#ret) -> #R
+        });
+        new_ty_param
+    } else {
+        quote!(
+            &'_ mut (dyn '_ + #FnMut(#ret) -> #R)
+        )
+    };
     inputs.push(parse_quote!(
-        #continuation_name : __Continuation__
+        #continuation_name : #F
     ));
     *ident = format_ident!("with_{}", ident);
     if let Some(block) = block {
@@ -242,14 +276,6 @@ fn handle_returning_locals (
             }
             ReturnMapper.visit_block_mut(block);
         }
-        attrs.push(parse_quote! {
-            #[allow(
-                nonstandard_style,
-                unreachable_code,
-                unused_braces,
-                unused_parens,
-            )]
-        });
         proc_macro_use! {
             use $krate::{Some_};
         }
@@ -358,7 +384,7 @@ fn handle_returning_locals (
                 ")
             });
         } // end of recursive-related tranformations.
-        let mut block_prefix = quote! {
+        let mut block_prefix = if dyn_safe { quote!() } else { quote!(
             /// Some user-provided code patterns, once transformed, may scare
             /// Rust into thinking we are calling an `FnOnce()` multiple times.
             /// Since that _shouldn't_ be the case, we defer to a runtime check,
@@ -378,7 +404,7 @@ fn handle_returning_locals (
                         (__ret__)
                 }
             };
-        };
+        )};
         if continuation.is_some() {
             // Requires Rust 1.40.0
             block_prefix.extend(quote! {

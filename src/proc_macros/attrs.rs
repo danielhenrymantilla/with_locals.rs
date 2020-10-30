@@ -2,9 +2,12 @@
 
 use super::*;
 
-mod kw {
-    ::syn::custom_keyword!(continuation_name);
-    ::syn::custom_keyword!(recursive);
+pub(in crate)
+struct Attrs {
+    pub lifetime: Str,
+    pub continuation: Option<Ident>,
+    pub dyn_safe: bool,
+    pub recursive: bool,
 }
 
 impl Parse for Attrs {
@@ -14,6 +17,7 @@ impl Parse for Attrs {
         let mut ret = Self {
             lifetime: "ref".into(),
             continuation: None,
+            dyn_safe: false,
             recursive: false,
         };
         if let Some(lt) = input.parse::<Option<Lifetime>>()? {
@@ -22,6 +26,11 @@ impl Parse for Attrs {
                 return Ok(ret);
             }
         }
+        mod kw {
+            ::syn::custom_keyword!(continuation_name);
+            ::syn::custom_keyword!(dyn_safe);
+            ::syn::custom_keyword!(recursive);
+        }
         while input.is_empty().not() {
             match () {
                 | _case if input.peek(kw::recursive) => {
@@ -29,6 +38,13 @@ impl Parse for Attrs {
                     input.parse::<Token![=]>()?;
                     let bool_literal: LitBool = input.parse()?;
                     ret.recursive = bool_literal.value;
+                    input.parse::<Option<Token![,]>>()?;
+                },
+                | _case if input.peek(kw::dyn_safe) => {
+                    input.parse::<kw::dyn_safe>().unwrap();
+                    input.parse::<Token![=]>()?;
+                    let bool_literal: LitBool = input.parse()?;
+                    ret.dyn_safe = bool_literal.value;
                     input.parse::<Option<Token![,]>>()?;
                 },
                 | _case if input.peek(kw::continuation_name) => {

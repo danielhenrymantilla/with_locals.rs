@@ -1,3 +1,5 @@
+#![allow(nonstandard_style)]
+
 extern crate proc_macro;
 
 use ::proc_macro::{
@@ -15,9 +17,9 @@ use ::quote::{
 };
 use ::syn::{*,
     parse::{
-        Nothing,
+        // Nothing,
         Parse,
-        // Parser,
+        Parser,
         ParseStream,
     },
     // punctuated::Punctuated,
@@ -45,11 +47,7 @@ mod wrap_statements_inside_closure_body;
 
 type Str = ::std::borrow::Cow<'static, str>;
 
-struct Attrs {
-    lifetime: Str,
-    continuation: Option<Ident>,
-    recursive: bool,
-}
+use attrs::Attrs;
 
 /// See [the main documentation of the crate for info about this attribute](
 /// https://docs.rs/with_locals).

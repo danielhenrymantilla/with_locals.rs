@@ -1,10 +1,10 @@
-error: Missing `#[with]` annotation on the enscoping function
+error: `#[with]` can only be applied to an `fn`, a `trait`, or an `impl`.
   --> $DIR/stmt_expr.rs:12:13
    |
 12 |     let _ = #[with] expr();
    |             ^^^^^^^
 
-error: Missing `#[with]` annotation on the enscoping function
+error: `#[with]` can only be applied to an `fn`, a `trait`, or an `impl`.
  --> $DIR/stmt_expr.rs:6:5
   |
 6 |     #[with]
