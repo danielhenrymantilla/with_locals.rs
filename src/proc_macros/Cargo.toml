@@ -4,7 +4,7 @@ path = "mod.rs"
 
 [package]
 name = "with_locals-proc_macros"
-version = "0.1.1"
+version = "0.3.0-rc1"  # Keep in sync with main `Cargo.toml`
 authors = ["Daniel Henry-Mantilla <daniel.henry.mantilla@gmail.com>"]
 edition = "2018"
 
@@ -33,6 +33,7 @@ proc-macro2 = "=1.0.*"
 quote = "=1.0.*"
 
 bat = { optional = true, version = "0.15.4" }
+func_wrap = "0.1.2"
 
 [dependencies.syn]
 version = ">=1.0.1" # Only tested starting from 1.0.1 because of rustversion

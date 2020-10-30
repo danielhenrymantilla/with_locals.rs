@@ -16,28 +16,19 @@ pub(in super) use handle_let_bindings as f;
 /// ```
 pub(in super)
 fn handle_let_bindings (
-    fun: &'_ mut Input,
-    &Attrs { ref lifetime, .. }: &'_ Attrs,
+    block: &'_ mut Block,
+    &Attrs { ref lifetime, dyn_safe, recursive, .. }: &'_ Attrs,
 ) -> Result<()>
 {Ok({
     let mut encountered_error = None;
     let mut visitor = ReplaceLetBindingsWithCbCalls {
         encountered_error: &mut encountered_error,
         lifetime: &*lifetime,
+        dyn_safe_calls: dyn_safe && recursive,
     };
     use ::std::panic;
     if let Err(panic) = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-        match *fun {
-            | Input::ItemFn(ref mut it) => {
-                visitor.visit_item_fn_mut(it);
-            },
-            | Input::TraitItemMethod(ref mut it) => {
-                visitor.visit_trait_item_method_mut(it);
-            },
-            | Input::ImplItemMethod(ref mut it) => {
-                visitor.visit_impl_item_method_mut(it);
-            },
-        }
+        visitor.visit_block_mut(block)
     }))
     {
         if let Some(err) = encountered_error {
@@ -51,7 +42,9 @@ fn handle_let_bindings (
 struct ReplaceLetBindingsWithCbCalls<'__> {
     encountered_error: &'__ mut Option<::syn::Error>,
     lifetime: &'__ str,
+    dyn_safe_calls: bool,
 }
+
 impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
     fn visit_item_mut (
         self: &'_ mut Self,
@@ -71,17 +64,56 @@ impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
             throw! in self.encountered_error
         }
 
+        let orig_dyn_safe_calls = self.dyn_safe_calls;
         let with_idx = (0 ..).zip(&mut block.stmts).find_map(|(i, stmt)| {
             // `( #[with] )? let <binding> (: <ty>)? = <expr>;`
             if let Stmt::Local(ref mut let_binding) = *stmt {
                 let mut has_with = false;
+
+                fn dyn_safe_parser (input: ParseStream<'_>)
+                  -> Result<Option<bool>>
+                {
+                    match (|| Ok({
+                        let content;
+                        parenthesized!(content in input);
+                        content
+                    }))()
+                    {
+                        | Err(_) => {
+                            Ok(None)
+                        },
+                        | Ok(content) => {
+                            mod kw { ::syn::custom_keyword!(dyn_safe); }
+                            Ok(if  content
+                                    .parse::<Option<kw::dyn_safe>>()?
+                                    .is_some()
+                            {
+                                // allow the `#[with(dyn_safe)]` shorthand
+                                if  content.parse::<Option<Token![=]>>()?
+                                        .is_some()
+                                {
+                                    let lit_bool: LitBool = content.parse()?;
+                                    let _: Option<Token![,]> = content.parse()?;
+                                    Some(lit_bool.value)
+                                } else {
+                                    Some(true)
+                                }
+                            } else {
+                                None
+                            })
+                        },
+                    }
+                }
+
                 let_binding.attrs.retain(|attr| {
                     if attr.path.is_ident("with") {
                         has_with = true;
-                        if let Err(err) =
-                            ::syn::parse2::<Nothing>(attr.tokens.clone())
-                        {
-                            panic!(*self.encountered_error = Some(err));
+                        match dyn_safe_parser.parse2(attr.tokens.clone()) {
+                            Ok(Some(dyn_safe)) => self.dyn_safe_calls = dyn_safe,
+                            Ok(None) => {},
+                            Err(err) => {
+                                panic!(*self.encountered_error = Some(err));
+                            },
                         }
                         false // remove attr
                     } else {
@@ -255,12 +287,41 @@ impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
                         },
                     }
             ;
-            // args: append the continuation
-            args.push(parse_quote! {
-                | #binding | #closure_body
-            });
+
             proc_macro_use! {
-                use $krate::{ControlFlow};
+                use $krate::{ControlFlow, Some_};
+            }
+
+            // args: append the continuation
+            args.push(if self.dyn_safe_calls.not () {
+                parse_quote!(
+                    |#binding| #closure_body
+                )
+            } else {
+                parse_quote!(
+                    &mut {
+                        let mut closure = #Some_(|#binding| #closure_body);
+                        move |ret| {
+                            __with_locals_ret_slot__.replace(
+                                closure.take().unwrap()(ret)
+                            );
+                            ::with_locals::dyn_safe::ContinuationReturn
+                        }
+                    }
+                )
+            });
+            if self.dyn_safe_calls {
+                proc_macro_use! {
+                    use $krate::{None_};
+                }
+                call = parse_quote!({
+                    let mut __with_locals_ret_slot__ = #None_;
+                    {
+                        let __with_locals_ret_slot__ = &mut __with_locals_ret_slot__;
+                        let _ = #call;
+                    }
+                    __with_locals_ret_slot__.unwrap()
+                });
             }
             block.stmts.push(Stmt::Expr(parse_quote! {
                 match #call {
@@ -271,6 +332,7 @@ impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
                 }
             }));
         }
+        self.dyn_safe_calls = orig_dyn_safe_calls;
         // sub-recurse.
         block
             .stmts

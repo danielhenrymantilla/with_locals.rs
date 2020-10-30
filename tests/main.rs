@@ -219,3 +219,37 @@ fn loops ()
     ```
     */
 }
+
+#[test]
+#[with('ref)]
+fn recursive ()
+{
+    /// Recursive
+    #[with(recursive = true)]
+    fn recursive_f (recurse: bool) -> &'ref ()
+    {
+        if recurse {
+            let _: &'ref _ = recursive_f(false);
+        }
+        &()
+    }
+    let _it: &'ref () = recursive_f(true);
+}
+
+#[test]
+#[with]
+fn object_safe ()
+{
+    #[with(dyn_safe = true)]
+    trait DynSafe {
+        fn foo (&self) -> &'ref ()
+        {
+            &()
+        }
+    }
+    impl DynSafe for () {}
+    let dyn_obj: &'_ dyn DynSafe = &();
+    #[with(dyn_safe)]
+    let _: &'ref () = dyn_obj.foo();
+    return;
+}

@@ -1,0 +1,23 @@
+error: Missing `#[with]` on the enscoping `impl` or `trait` block
+  --> $DIR/recursive_no_enscoping.rs:29:5
+   |
+29 |     #[with(recursive = true)]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: Missing `#[with]` on the enscoping `impl` or `trait` block
+  --> $DIR/recursive_no_enscoping.rs:22:5
+   |
+22 |     #[with(recursive = true)]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: Missing `#[with]` on the enscoping `impl` or `trait` block
+  --> $DIR/recursive_no_enscoping.rs:13:5
+   |
+13 |     #[with(recursive = true)]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: Missing `#[with]` on the enscoping `impl` or `trait` block
+ --> $DIR/recursive_no_enscoping.rs:6:5
+  |
+6 |     #[with(recursive = true)]
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^

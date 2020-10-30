@@ -1,8 +1,29 @@
 fn handle_returning_locals (
-    fun: &'_ mut Input,
-    &Attrs { ref lifetime, ref continuation }: &'_ Attrs,
-)
-{
+    fun: &'_ mut impl helpers::FnLike,
+    with_attrs: &'_ Attrs,
+    outer_scope: Option<(&'_ Generics, ::func_wrap::ImplOrTrait<'_>)>,
+) -> Result<()>
+{Ok({
+    let     &Attrs {
+        ref lifetime,
+        ref continuation,
+        dyn_safe,
+        recursive,
+            } = with_attrs
+    ;
+    fun.fields().attrs.push(parse_quote! {
+        #[allow(
+            nonstandard_style,
+            unreachable_code,
+            unused_braces,
+            unused_parens,
+        )]
+    });
+    let not_dyn_safe = dyn_safe.not();
+    // Note: currently, the necessary `dyn`-safe transformations also allow
+    // preventing the recursive function issue, so no need to apply any extra
+    // transformations.
+    let recursive = recursive && not_dyn_safe;
     let continuation_name =
         if let Some(ref continuation_name) = continuation {
             format_ident!("{}", continuation_name)
@@ -14,7 +35,7 @@ fn handle_returning_locals (
     let ret_ty =
         if let ReturnType::Type(_, ref mut it) = fun.sig.output { it } else {
             // Nothing to do
-            return;
+            return Ok(());
         }
     ;
     let mut lifetimes = vec![]; {
@@ -24,47 +45,61 @@ fn handle_returning_locals (
     }
     if lifetimes.is_empty() {
         // Nothing to do
-        return;
+        return Ok(());
     }
 
     // By now, there is at least one `'self` occurence in the return type:
     // transform the whole function into one using the `with_` continuation
     // pattern.
-    let __ {
-        ref mut attrs,
-        sig: &mut Signature {
-            ref mut ident,
-            ref mut inputs,
-            ref mut output,
-            ref mut generics, .. },
-        ref mut block,
-        .. } = {fun}
-    ;
+    let __ { sig, block, .. } = fun;
+    let &mut Signature {
+        ref mut ident,
+        ref mut inputs,
+        ref mut output,
+        ref mut generics, .. } = sig;
     // Add the <R, F : FnOnce(OutputReferringToLocals) -> R> generic params.
-    generics.params.push(parse_quote! {
-        __Continuation_Return__ /* R */
-    });
+    // (Or use the `dyn`-safe equivalent).
+    let R = if not_dyn_safe {
+        let new_ty_param = quote!(
+            __Continuation_Return__
+        );
+        generics.params.push(parse_quote!( #new_ty_param ));
+        new_ty_param
+    } else {
+        quote!(
+            ::with_locals::dyn_safe::ContinuationReturn
+        )
+    };
     let ret =
-        match
-            ::core::mem::replace(output, parse_quote! {
-              -> __Continuation_Return__
-            })
-        {
+        match ::core::mem::replace(output, parse_quote!( -> #R )) {
             | ReturnType::Type(_, ty) => *ty,
             | ReturnType::Default => unreachable!(),
         }
     ;
-    generics.params.push(parse_quote! {
-        __Continuation__ /* F */
-        :
-        // for<#(#lifetimes),*>
-        ::core::ops::FnOnce(#ret) -> __Continuation_Return__
-    });
-    inputs.push(parse_quote! {
-        #continuation_name : __Continuation__
-    });
+    proc_macro_use! {
+        use $krate::{FnMut, FnOnce};
+    }
+    let F = if not_dyn_safe {
+        let new_ty_param = quote!(
+            __Continuation__
+        );
+        generics.params.push(parse_quote! {
+            #new_ty_param
+            :
+            // for<#(#lifetimes),*>
+            #FnOnce(#ret) -> #R
+        });
+        new_ty_param
+    } else {
+        quote!(
+            &'_ mut (dyn '_ + #FnMut(#ret) -> #R)
+        )
+    };
+    inputs.push(parse_quote!(
+        #continuation_name : #F
+    ));
     *ident = format_ident!("with_{}", ident);
-    if let Some(&mut ref mut block) = *block {
+    if let Some(block) = block {
         // Only apply `return <expr> -> return cont(<expr>)` magic
         // if no continuation name has been provided.
         if continuation.is_none() {
@@ -183,7 +218,7 @@ fn handle_returning_locals (
                     proc_macro_use! {
                         use $krate::{
                             Into,
-                            Result,
+                            Ok_, Err_,
                             Try,
                         };
                     }
@@ -220,8 +255,8 @@ fn handle_returning_locals (
                             self.visit_expr_mut(inner_expr);
                             *expr = parse_quote! {
                                 match #inner_expr { it => match #Try::into_result(it) {
-                                    | #Result::Ok(it) => it,
-                                    | #Result::Err(err) => {
+                                    | #Ok_(it) => it,
+                                    | #Err_(err) => {
                                         return __continuation__(
                                             #Try::from_err(
                                                 #Into::into(err)
@@ -241,13 +276,115 @@ fn handle_returning_locals (
             }
             ReturnMapper.visit_block_mut(block);
         }
-        attrs.push(parse_quote! {
-            #[allow(unreachable_code, unused_braces)]
-        });
         proc_macro_use! {
-            use $krate::{Option};
+            use $krate::{Some_};
         }
-        let mut block_prefix = quote! {
+        if recursive {
+            /* We currently have something like:
+            ```rust
+            fn with_foo<R, F : FnOnce(&'_ ()) -> R> (
+                recurse: bool,
+                with: F,
+            ) -> R
+            {
+                if recurse {
+                    with_foo(false, |ret| {
+                        with(ret)
+                    })
+                } else {
+                    with(&())
+                }
+            }
+            ```
+
+            The objetive, to avoid the infinite type recursion, is to replace
+            `<F>` with an `&mut dyn FnMut`, and `<R>` with a return value of
+            `()` (the value will be "returned" through a mutate out slot,
+            thus type-erased by the `dyn FnMut` type erasure).
+
+              - EDIT: Actually, returning `()` is less type-safe, in that a
+                      caller may forget to call the continuation (especially
+                      if they opt out of sugar).
+                      So we only replace `R` with `()` at call site.
+
+            ```rust
+            fn with_foo<R, F : FnOnce(&'_ ()) -> R> (
+                recurse: bool,
+                with: F,
+            ) -> R
+            {
+                let mut ret_slot = None;
+                let mut with = Some(with);
+
+                // wrapped_func…
+                fn __recurse_with_foo<R> (
+                    recurse: bool,
+                    with: &'_ mut (dyn FnMut(&'_ ())) -> R,
+                ) -> R
+                {
+                    if recurse {
+                        with_foo(false, |ret| {
+                            with(ret)
+                        })
+                    } else {
+                        with(&())
+                    }
+                }
+                // …_call
+                __recurse_with_foo(recurse, &mut |ret| -> () {
+                    ret_slot = Some(with.take().unwrap()(ret));
+                });
+
+                ret_slot.unwrap()
+            }
+            ``` */
+            proc_macro_use! {
+                use $krate::{FnMut, None_};
+            }
+            // handle_let_bindings::f(block, with_attrs)?;
+            let mut wrapped_func_call = match ::func_wrap::func_wrap(
+                sig,
+                ::core::mem::replace(block, parse_quote!( {} )),
+                outer_scope,
+            )
+            {
+                | Some(it) => it,
+                | None => return Err(Error::new(Span::call_site(), "\
+                    Missing `#[with]` on the enscoping `impl` or `trait` block\
+                ")),
+            };
+            handle_let_bindings::f(&mut wrapped_func_call.block, with_attrs)?;
+            wrapped_func_call.sig.ident = format_ident!(
+                "__recurse_{}",
+                wrapped_func_call.sig.ident,
+            );
+            let _ = wrapped_func_call.sig.generics.params.pop(); // <…, F>
+            match wrapped_func_call.sig.inputs.last_mut() {
+                | Some(&mut FnArg::Typed(ref mut pat_ty)) => {
+                    *pat_ty.ty = parse_quote!(
+                        &'_ mut (dyn #FnMut(#ret) -> __Continuation_Return__)
+                    );
+                },
+                | _ => unreachable!(),
+            }
+            *wrapped_func_call.call_site_args.last_mut().unwrap() =
+                parse_quote!(
+                    &mut |__ret__: #ret| -> (/* Ensure this is not generic */) {
+                        __ret_slot__ = #Some_(#continuation_name(__ret__));
+                    }
+                )
+            ;
+            *block = parse_quote!({
+                let mut __ret_slot__ = #None_;
+                type __Continuation_Return__ = ();
+                let () = #wrapped_func_call;
+                __ret_slot__.expect("\
+                    Fatal `with_locals` error: \
+                    failed to call the continuation.\
+                ")
+            });
+        } // end of recursive-related tranformations.
+        let mut block_prefix = if dyn_safe { quote!() } else { quote!(
             /// Some user-provided code patterns, once transformed, may scare
             /// Rust into thinking we are calling an `FnOnce()` multiple times.
             /// Since that _shouldn't_ be the case, we defer to a runtime check,
@@ -255,20 +392,24 @@ fn handle_returning_locals (
             extern {}
             let mut #continuation_name = {
                 let mut #continuation_name =
-                    #Option::Some(#continuation_name)
+                    #Some_(#continuation_name)
                 ;
                 move |__ret__: #ret| {
-                    #continuation_name.take().unwrap()(__ret__)
+                    #continuation_name
+                        .take()
+                        .expect("\
+                            Fatal `with_locals` error: \
+                            attempted to call an `FnOnce()` multiple times.\
+                        ")
+                        (__ret__)
                 }
             };
-        };
+        )};
         if continuation.is_some() {
             // Requires Rust 1.40.0
             block_prefix.extend(quote! {
                 macro_rules! #continuation_name { ($expr:expr) => (
-                    match $expr { __ret__ => {
-                        return #continuation_name(__ret__);
-                    }}
+                    return #continuation_name($expr)
                 )}
             });
         }
@@ -277,4 +418,4 @@ fn handle_returning_locals (
             #block
         });
     }
-}
+})}

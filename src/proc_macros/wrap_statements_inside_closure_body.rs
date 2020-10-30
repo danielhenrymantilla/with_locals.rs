@@ -86,7 +86,7 @@ fn wrap_statements_inside_closure_body (
                     use $krate::{
                         ControlFlow,
                         Into,
-                        Result,
+                        Ok_, Err_,
                         Try,
                     };
                 }
@@ -167,8 +167,8 @@ fn wrap_statements_inside_closure_body (
                         self.visit_expr_mut(matchee);
                         *expr = parse_quote! {
                             match #matchee { it => match #Try::into_result(it) {
-                                | #Result::Ok(it) => it,
-                                | #Result::Err(err) => {
+                                | #Ok_(it) => it,
+                                | #Err_(err) => {
                                     return #ControlFlow::EarlyReturn(
                                         #Try::from_err(
                                             #Into::into(err)
