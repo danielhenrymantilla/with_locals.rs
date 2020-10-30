@@ -38,9 +38,9 @@ use self::{
 #[macro_use]
 mod helpers;
 
+mod attrs;
 include!("handle_returning_locals.rs");
 mod handle_let_bindings;
-mod parse;
 mod wrap_statements_inside_closure_body;
 
 type Str = ::std::borrow::Cow<'static, str>;
