@@ -23,6 +23,7 @@ keywords = [
     "cps",
 ]
 categories = [
+    "no-std",
     "rust-patterns",
 ]
 
