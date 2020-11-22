@@ -253,3 +253,21 @@ fn object_safe ()
     let _: &'ref () = dyn_obj.foo();
     return;
 }
+
+#[with]
+fn check (_: &'static ()) -> &'ref &()
+{
+    &&()
+}
+
+#[with]
+fn _elision ()
+{
+    match ::core::convert::identity(()) { ref it => {
+        let at_it = {
+            let &at_it: &'ref _ = check(it);
+            at_it
+        };
+        drop(at_it)
+    }};
+}

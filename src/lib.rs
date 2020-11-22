@@ -1,9 +1,11 @@
-#![forbid(unsafe_code)]
-
 #![cfg_attr(feature = "nightly",
     feature(external_doc),
     doc(include = "../README.md"),
 )]
+
+#![forbid(unsafe_code)]
+#![no_std]
+
 
 /// To avoid a bug when cross compiling
 extern crate proc_macros;
