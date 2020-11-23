@@ -37,7 +37,7 @@ fn handle_returning_locals (
         }
     ;
     let fun = fun.fields();
-    unelide_lifetimes(fun.sig)?;
+    unelide_lifetimes(fun.sig, lifetime)?;
     let ret_ty =
         if let ReturnType::Type(_, ref mut it) = fun.sig.output { it } else {
             // Nothing to do
@@ -260,16 +260,18 @@ fn handle_returning_locals (
                             // recurse
                             self.visit_expr_mut(inner_expr);
                             *expr = parse_quote! {
-                                match #inner_expr { it => match #Try::into_result(it) {
-                                    | #Ok_(it) => it,
-                                    | #Err_(err) => {
-                                        return __continuation__(
-                                            #Try::from_err(
-                                                #Into::into(err)
-                                            )
-                                        );
-                                    },
-                                }}
+                                match #inner_expr {
+                                    it => match #Try::into_result(it) {
+                                        | #Ok_(it) => it,
+                                        | #Err_(err) => {
+                                            return __continuation__(
+                                                #Try::from_err(
+                                                    #Into::into(err)
+                                                )
+                                            );
+                                        },
+                                    }
+                                }
                             };
                         },
 
@@ -374,7 +376,7 @@ fn handle_returning_locals (
             }
             *wrapped_func_call.call_site_args.last_mut().unwrap() =
                 parse_quote!(
-                    &mut |__ret__: #ret| -> (/* Ensure this is not generic */) {
+                    &mut |__ret__: #ret| -> (/* Ensure this isn't generic */) {
                         __ret_slot__ = #Some_(#continuation_name(__ret__));
                     }
                 )
@@ -425,11 +427,8 @@ fn handle_returning_locals (
     }
 })}
 
-fn unelide_lifetimes (sig: &'_ mut Signature)
-  -> ::core::result::Result<
-        (),
-        Error, // TokenStream2,
-    >
+fn unelide_lifetimes (sig: &'_ mut Signature, special_lifetime: &'_ str)
+  -> Result<()>
 {
     fn mk_named_lifetime (span: Span)
       -> Lifetime
@@ -488,7 +487,6 @@ fn unelide_lifetimes (sig: &'_ mut Signature)
                 reference: Some((ref and, ref mut mb_lifetime)),
                 ..
             }))
-                // if mb_lifetime.as_ref().map_or(true, |lt| lt.ident == "_")
             => {
                 return elided_lifetime_in_receiver_case(and, mb_lifetime);
             },
@@ -504,7 +502,6 @@ fn unelide_lifetimes (sig: &'_ mut Signature)
                     lifetime: ref mut mb_lifetime,
                     ..
                 })
-                    // if mb_lifetime.as_ref().map_or(true, |lt| lt.ident == "_")
                 => {
                     return elided_lifetime_in_receiver_case(and, mb_lifetime);
                 },
@@ -516,38 +513,35 @@ fn unelide_lifetimes (sig: &'_ mut Signature)
     }
 
     // Vec with spans pointing to elided lifetimes.
-    let ref mut elided_lifetimes_spans = vec![];
+    let (mut first_span, mut last_span) = (None, None);
+    let mut elided_lifetimes_count = 0;
     let ref mut named_lifetimes = ::std::collections::HashSet::<Ident>::new();
     inputs
         .iter_mut()
-        .try_for_each(|fn_arg| Ok(match *fn_arg {
+        .for_each(|fn_arg| match *fn_arg {
             | FnArg::Typed(PatType { ref mut ty, .. }) => {
-                let mut err = None;
                 replace_each_lifetime_with(ty, &mut |span, name| {
+                    let _ = first_span.get_or_insert(span);
+                    last_span = Some(span);
                     if let Some(name) = name {
-                        if name == "__elided" {
-                            err = Some(Error::new(span, "HERE"));
-                            return None;
-                        }
                         named_lifetimes.insert(name.clone());
                         None
                     } else {
-                        elided_lifetimes_spans.push(span);
+                        elided_lifetimes_count += 1;
                         Some(mk_named_lifetime(span))
                     }
                 });
-                if let Some(err) = err { return Err(err);  }
             },
             | FnArg::Receiver(_) => {
                 // No interesting lifetimes to be encountered here,
                 // otherwise the `if has_receiver` short-circuiting branch
                 // would have caught it.
                 // Thus, continue / pass.
-                return Ok(());
+                return;
             },
-        }))?
+        })
     ;
-    if let &[span, ..] = elided_lifetimes_spans.as_slice() {
+    if let Some(span) = first_span {
         // There was at least one elided lifetime replaced with
         // `mk_named_lifetime`, thus introduce that name within the generic
         // lifetime params.
@@ -556,10 +550,14 @@ fn unelide_lifetimes (sig: &'_ mut Signature)
             #lifetime
         ));
     }
+    let input_lifetime_params_count = <usize as ::core::ops::Add>::add(
+        elided_lifetimes_count,
+        named_lifetimes.len(),
+    );
     let mut lifetime_cannot_be_derived_from_arguments = None;
     replace_each_lifetime_with(output, &mut |span, name| {
         if name.is_some() { return None; }
-        if elided_lifetimes_spans.len() + named_lifetimes.len() != 1 {
+        if input_lifetime_params_count != 1 {
             lifetime_cannot_be_derived_from_arguments = Some(span);
             None
         } else {
@@ -574,36 +572,58 @@ fn unelide_lifetimes (sig: &'_ mut Signature)
         }
     });
     if let Some(err_span) = lifetime_cannot_be_derived_from_arguments {
-        const ERR_MSG: &str = "\
-            this function's return type contains a borrowed value, \
-            but the lifetime cannot be derived from the arguments\n\
-            error[E0105]: expected named lifetime parameter\n\
-            help: consider \
-            introducing explicit lifetime parameters, \
-            using the `'static` lifetime, \
-            or using the `#[with]`-special lifetime\
-        ";
-        // Hacks to give the error message more complex / advanced spans
-        // (ideally it should be pointing to the elided lifetimes).
-        Err(/* if let &[span1, span2, ..] = &spans[..] {
-            use ::proc_macro2::*;
-            fn mk_dummy_token (span: Span)
-              -> TokenTree
-            {
-                let mut p = Punct::new('.', Spacing::Alone);
-                p.set_span(span);
-                p.into()
-            }
-
-            Error::new_spanned(
-                Iterator::chain(
-                    ::core::iter::once(mk_dummy_token(span1)),
-                    ::core::iter::once(mk_dummy_token(span2)),
-                ).collect::<TokenStream2>(),
-                ERR_MSG,
-            )
-        } else */ {
-            Error::new(err_span, ERR_MSG)
+        Err(match (first_span, last_span) {
+            | (Some(first_span), Some(last_span)) => {
+                let mut err = Error::new(err_span, "\
+                    \n\
+                    error[E0106]: missing lifetime specifier
+                ");
+                let extra_err_msg = format!(
+                    "\
+                    \n\
+                    help: this function's return type contains a borrowed \
+                    value, but the signature does not say which one of the \
+                    arguments' {} lifetimes it is borrowed from\n\
+                    help: specify it using explicitly named lifetime \
+                    parameters\
+                    ",
+                    input_lifetime_params_count,
+                );
+                // Hacks to give the error message more complex / advanced spans
+                // (ideally it should be pointing to the elided lifetimes).
+                use ::proc_macro2::*;
+                fn mk_dummy_token (span: Span)
+                  -> TokenTree
+                {
+                    let mut p = Punct::new('.', Spacing::Alone);
+                    p.set_span(span);
+                    p.into()
+                }
+                err.combine(Error::new_spanned(
+                    Iterator::chain(
+                        ::core::iter::once(mk_dummy_token(first_span)),
+                        ::core::iter::once(mk_dummy_token(last_span)),
+                    ).collect::<TokenStream2>(),
+                    extra_err_msg,
+                ));
+                err
+            },
+            #[cfg(debug_assertions)]
+            | (Some(_), None) | (None, Some(_)) => unreachable!(),
+            | _ => {
+                let err_msg = format!(
+                    "\
+                    \n\
+                    error[E0106]: missing lifetime specifier\n \
+                    help: this function's return type contains a borrowed \
+                    value, but there is no value for it to be borrowed from\n \
+                    help: consider using the `'static` lifetime, or the \
+                    function-local lifetime, `'{}`\
+                    ",
+                    special_lifetime,
+                );
+                Error::new(err_span, err_msg)
+            },
         })
     } else {
         Ok(())
@@ -613,11 +633,6 @@ fn unelide_lifetimes (sig: &'_ mut Signature)
 type Cb<'__> = &'__ mut (
     dyn FnMut(Span, /* name: */ Option<&'_ Ident>) -> Option<Lifetime>
 );
-
-// enum LifetimeKind<'name> {
-//     Elided,
-//     Named(&'name Ident),
-// }
 
 fn replace_each_lifetime_with (
     ty: &'_ mut Type,
@@ -631,11 +646,13 @@ fn replace_each_lifetime_with (
             lifetime: &'_ mut Lifetime,
         )
         {
-            let name = if lifetime.ident == "_" {
-                None
-            } else {
-                Some(&lifetime.ident)
-            };
+            let name =
+                if lifetime.ident == "_" {
+                    None
+                } else {
+                    Some(&lifetime.ident)
+                }
+            ;
             if let Some(new_lifetime) = (self.0)(lifetime.span(), name) {
                 *lifetime = new_lifetime;
             }
@@ -650,16 +667,20 @@ fn replace_each_lifetime_with (
                 | Type::Reference(TypeReference {
                     and_token: ref and,
                     lifetime: ref mut implicitly_elided_lifetime @ None,
+                    elem: ref mut referee,
                     ..
                 }) => {
                     if let Some(new_lifetime) = (self.0)(and.span(), None) {
                         *implicitly_elided_lifetime = Some(new_lifetime);
+                        // subrecurse only on the referee, not the newly
+                        // introduced lifetime.
+                        self.visit_type_mut(referee);
+                        return;
                     }
                 },
                 | Type::BareFn(_) => {
                     /* do nothing */
-                    // do not sub-recurse
-                    return;
+                    return; // do not sub-recurse
                 },
                 | Type::TraitObject(ref mut trait_object) => {
                     trait_object.bounds.iter_mut().for_each(|it| match *it {

@@ -33,7 +33,7 @@ proc-macro2 = "=1.0.*"
 quote = "=1.0.*"
 
 bat = { optional = true, version = "0.15.4" }
-func_wrap = "0.1.2"
+func_wrap = "0.1.3"
 
 [dependencies.syn]
 version = ">=1.0.1" # Only tested starting from 1.0.1 because of rustversion

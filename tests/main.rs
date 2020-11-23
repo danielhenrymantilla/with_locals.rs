@@ -255,14 +255,14 @@ fn object_safe ()
 }
 
 #[with]
-fn check (_: &'static ()) -> &'ref &()
-{
-    &&()
-}
-
-#[with]
 fn _elision ()
 {
+    #[with]
+    fn check (_: &'_ ()) -> &'ref &'_ ()
+    {
+        &&()
+    }
+
     match ::core::convert::identity(()) { ref it => {
         let at_it = {
             let &at_it: &'ref _ = check(it);
