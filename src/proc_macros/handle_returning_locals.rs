@@ -48,7 +48,7 @@ fn handle_returning_locals (
         return Ok(());
     }
 
-    // By now, there is at least one `'self` occurence in the return type:
+    // By now, there is at least one `'ref` occurence in the return type:
     // transform the whole function into one using the `with_` continuation
     // pattern.
     let __ { sig, block, .. } = fun;

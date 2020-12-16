@@ -47,7 +47,7 @@ code whatsoever**:
 #
 #[with]
 fn local_reference ()
-  -> &'self i32
+  -> &'ref i32
 {
     let x = 0;
     &x
@@ -55,7 +55,7 @@ fn local_reference ()
 
 #[with]
 fn local_iterator ()
-  -> ::std::slice::Iter<'self, i32>
+  -> ::std::slice::Iter<'ref, i32>
 {
     let v = vec![1, 2, 3];
     v.iter()

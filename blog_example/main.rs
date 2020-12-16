@@ -43,7 +43,7 @@ trait WithNext {
     type Item;
 
     #[with]
-    fn next (self: &'_ mut Self) -> &'self Self::Item;
+    fn next (self: &'_ mut Self) -> &'ref Self::Item;
 }
 
 #[with]
