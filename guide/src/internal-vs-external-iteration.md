@@ -47,20 +47,19 @@ that API can have one of two forms (I'll be using Rust for the code examples):
 
   - Any kind of API that offers `.for_each()`, `.try_fold()`, _etc._
 
-    In practice, `.try_fold()` is sufficient to implement most of them, and
+    In practice, `.try_for_each()` is sufficient to implement most of them, and
     could be seen as the representative of **internal** iteration:
 
     ```rust,ignore
     trait InternallyIterable : Sized {
         type Item;
 
-        fn try_fold<Acc, Err, F> (
+        fn try_for_each<Err, F> (
             self: Self,
-            acc0: Acc,
-            f: F
-        ) -> Result<Acc, Err>
+            _: F
+        ) -> Result<(), Err>
         where
-            F : FnMut(acc, &'_ Self::Item) -> Result<Acc, Err>,
+            F : FnMut(&'_ Self::Item) -> Result<(), Err>,
         ;
 
         fn for_each...
@@ -75,14 +74,26 @@ that API can have one of two forms (I'll be using Rust for the code examples):
         trait InternallyIterable : Sized {
             type Item;
 
+            fn try_for_each<Err, F> (
+                self: Self,
+                _: F,
+            ) -> Result<(), Err>
+            where
+                F : FnMut(&'_ Self::Item) -> Result<(), Err>,
+            ;
+
             fn try_fold<Acc, Err, F> (
                 self: Self,
                 acc0: Acc,
-                f: F,
+                mut f: F,
             ) -> Result<Acc, Err>
             where
                 F : FnMut(Acc, &'_ Self::Item) -> Result<Acc, Err>,
-            ;
+            {
+                let mut acc = acc0;
+                self.try_for_each(|elem| Ok(acc = f(acc, elem)?))?;
+                Ok(acc)
+            }
 
             fn fold<Acc, F> (
                 self: Self,
@@ -102,16 +113,6 @@ that API can have one of two forms (I'll be using Rust for the code examples):
                     | Ok(acc) => acc,
                     | Err(infallible) => match infallible { /* ! */ },
                 }
-            }
-
-            fn try_for_each<Err, F> (
-                self: Self,
-                mut f: F,
-            ) -> Result<(), Err>
-            where
-                F : FnMut(&'_ Self::Item) -> Result<(), Err>,
-            {
-                self.try_fold((), move |(), item| f(item))
             }
 
             fn for_each<F> (
@@ -135,17 +136,16 @@ that API can have one of two forms (I'll be using Rust for the code examples):
 
       - <details><summary>Truly general definition using GAT</summary>
 
-        ```rust
+        ```rust,edition2018
         trait InternallyIterable {
             type Item<'__>;
 
-            fn try_fold<Acc, Err, F> (
+            fn try_for_each<Err, F> (
                 self: Self,
-                acc0: Acc,
-                f: F,
-            ) -> Result<Acc, Err>
+                _: F
+            ) -> Result<(), Err>
             where
-                F : FnMut(Acc, Self::Item<'_>) -> Result<Acc, Err>,
+                F : FnMut(Self::Item<'_>) -> Result<(), Err>,
             ;
         }
         ```
@@ -191,18 +191,17 @@ Indeed, try to solve the following challenge:
     impl<Item> InternallyIterable for &'_ [RefCell<Item>] {
         type Item = Item;
 
-        fn try_fold<Acc, Err, F> (
+        fn try_for_each<Err, F> (
             self: Self,
-            mut acc: Acc,
             mut f: F,
-        ) -> Result<Acc, Err>
+        ) -> Result<(), Err>
         where
-            F : FnMut(Acc, &'_ Self::Item) -> Result<Acc, Err>,
+            F : FnMut(&'_ Self::Item) -> Result<(), Err>,
         {
             for refcell in self {
-                acc = f(acc, &*refcell.borrow())?;
+                f(&*refcell.borrow())?;
             }
-            Ok(acc)
+            Ok(())
         }
     }
     ```
@@ -211,22 +210,21 @@ Indeed, try to solve the following challenge:
 
       - <details><summary>Aside: internal iteration and <code>yield</code> syntax</summary>
 
-        see that `acc = f(acc, yielded_item)?;` line?
+        see that `f(yielded_item)?;` line?
 
         We can factor that line within a `yield_!` macro, just for the kicks:
 
         ```rust,ignore
-        fn try_fold<Acc, Err, F> (
+        fn try_for_each<Err, F> (
             self: Self,
-            mut acc: Acc,
             mut f: F,
-        ) -> Result<Acc, Err>
+        ) -> Result<(), Err>
         where
-            F : FnMut(Acc, &'_ Self::Item) -> Result<Acc, Err>,
+            F : FnMut(&'_ Self::Item) -> Result<(), Err>,
         {
-            macro_rules! yield_ { ($value:expr) => ({
-                acc = f(acc, &*refcell.borrow())?;
-            })}
+            macro_rules! yield_ { ($value:expr) => (
+                f($value)?
+            )}
 
             for refcell in self {
                 yield_!( &*refcell.borrow() );

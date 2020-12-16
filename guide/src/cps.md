@@ -78,11 +78,11 @@ If you click on the <button class="fa fa-play play-button" hidden="" title="Run 
 yadda.
 
 Indeed, our `x = 0` variable from before is now the `.foo.borrow()` [guard](
-https://doc.rust-lang.org/core/cell/struct.Ref.html), so that simple situation
-did represent a valid use case.
+https://doc.rust-lang.org/core/cell/struct.Ref.html): that simple situation
+did represent a valid use case!
 
 > But wait, a clever usage of owned guards and destructors allow us to have
-> this pattern, so I don't see the problem:
+> the following pattern, so I don't see the problem:
 >
 > ```rust
 > # use ::core::{cell::RefCell, ops::Deref};
@@ -95,7 +95,7 @@ did represent a valid use case.
 > impl Struct {
 >     fn foo (self: &'_ Self)
 >       -> impl '_ + Deref<Target = Foo> // this could be `Ref<'_, Field>`,
->                                        // but `impl` generalizes better (RefCell / RwLock agnostic)
+>                                        // but `impl` generalizes better (`RefCell` / `RwLock` agnostic)
 >     {
 >         self.foo.borrow()
 >     }
@@ -103,7 +103,7 @@ did represent a valid use case.
 > ```
 
 Well, that return type doesn't look super obvious, but fair enough, for that
-use case any macro or human can do the
+use case any human can do the
 `&'lifetime Type -> impl 'lifetime + Deref<Target = Type>`
 transformation.
 
@@ -123,6 +123,7 @@ transformation.
     }
 
     impl Struct {
+        /// Borrow `.foo`
         fn foo (self: &'_ Self)
           -> Pseudo!(&'_ Foo)
         {
@@ -146,13 +147,13 @@ wish to access
 # use ::core::{cell::RefCell, ops::Deref};
 # type Bar = (/* ... */);
 #
+struct Struct {
+    foo: RefCell<Foo>,
+}
+
 struct Foo {
     bar: Bar,
     // ...
-}
-
-struct Struct {
-    foo: RefCell<Foo>,
 }
 
 # macro_rules! Pseudo {(
@@ -162,6 +163,7 @@ struct Struct {
 # )}
 #
 impl Struct {
+    /// Borrow `.foo.bar`
     fn bar (self: &'_ Self)
       -> Pseudo!(&'_ Bar)
     {
@@ -173,7 +175,7 @@ impl Struct {
 }
 ```
 
-Hmm, I think we can all agree this is become less and less natural, and more
+Hmm, I think we can all agree this is becoming less and less natural, and more
 and more contrived.
 
 Time for the _coup de grâce_:
@@ -188,13 +190,14 @@ instead.
 You will see this is **not possible to implement**,
 
   - unless you use some kind of self-referential wrapper that requires `unsafe`,
-    or a crate that does this for you (such as [`::owning_ref`'s `OwningHandle`](
+    or a crate that does this for you (such as [`::owning_ref`'s
+    `OwningHandle`](
     https://docs.rs/owning_ref/0.4.1/owning_ref/struct.OwningHandle.html)).
 
     But these are still hard to generalize to even more complex and nested
-    cases referencial structs, with the now added very real risk of Undefined
-    Behavior, whereby sneaky bugs may occur, or even security vulnerabilities
-    may happen.
+    cases of referential structs, with the now added very real risk of Undefined
+    Behavior, whereby hard-to-reproduce bugs may occur, or even security
+    vulnerabilities may happen ⚠️
 
 ## Conclusion
 
@@ -250,7 +253,7 @@ fn caller ()
         x = 0;                    // |
         &x                        // |
     };                            // |
-    stuff(r) // does not dangle!     |
+    stuff(r) // does not dangle! 🙌  |
 } // <-- here -----------------------+
 ```
 
@@ -273,7 +276,7 @@ an anti-pattern.
 // Don't do this!
 let name: String =
     ::std::env::var("NAME").ok()
-        .unwrap_or("default_name".into()) // Heap-allocates even when present 😭
+        .unwrap_or("default_name".into()) // Heap-allocates even when present ;_;
 ;
 // Slightly better, but is still nevertheless unnecessarily expensive
 // in the missing case:
@@ -325,9 +328,9 @@ let name: &'_ str = &*name;
 println!("name = {:?}", name);
 ```
 
-Well, the **trick** is that one does not need `Cow` for the above, the same can
-be achieved using long(er)-lived storage, through _delayed_ (and optional)
-initializtion:
+Well, the **trick** is that **one does not need `Cow` for the above, the same
+can be achieved using long(er)-lived storage, through _delayed_ (and optional)
+initialization**:
 
 ```rust,editable
 let storage: String;
@@ -338,7 +341,7 @@ let name: &'_ str = match ::std::env::var("NAME").ok() {
 println!("{}", name);
 ```
 
-The above trick has advantage of supporting more complex types that [`Cow`]
+The above trick has the advantage of supporting more complex types that [`Cow`]
 does not support 😎.
 
 ___
@@ -362,8 +365,8 @@ function:
 #
 fn caller ()
 {
-    let mut x = None;
-    let r = get_reference(&mut x);
+    let mut storage_for_x = None;
+    let r = get_reference(&mut storage_for_x);
     stuff(r);
 }
 // where
@@ -371,13 +374,13 @@ fn get_reference<'x> (out_x: &'x mut Option<i32>)
   -> &'x i32
 {
     debug_assert!(out_x.is_none());
-    let at_x = out_x.get_or_insert(0);
-    &(*at_x) // x ~ *at_x
+    let at_x: &'x mut i32 = out_x.get_or_insert(0); // &mut x
+    at_x
 }
 ```
 
   - Needless to say, this does not look very nice, and can get very dirty, very
-    quickly, once such functions are chained (Plus, if logic bugs are involved,
+    quickly, once such functions are chained (plus, if logic bugs are involved,
     we may initialise `*out_x` multiple times and panic).
 
 <details><summary>This pattern applied to the nested <code>RefCell</code> challenge</summary>
@@ -405,8 +408,8 @@ impl Struct {
         bar_guard: &'_2 mut Option<  Ref<'_1, Bar>  >,
     ) -> &'_2 Bar
     where
-        '_1 : '_2,
-        '_0 : '_1,
+        '_0 : '_1, // for `foo_guard`'s type to be well-formed.
+        '_1 : '_2, // for `bar_guard`'s type to be well-formed.
     {
         let foo = foo_guard.get_or_insert(self.foo.borrow());
         let bar = bar_guard.get_or_insert(foo.bar.borrow());
@@ -484,10 +487,10 @@ fn caller_2 ()
     let return_value_of_stuff = (|then_| {
         # let _: fn(&'_ i32) -> _ = then_;
         let x = 0;
-        then_(&x);
-    })(|r| {     // <-\ 
-        stuff(r) // <-+-- this is `then_`
-    });          // <-/
+        then_(&x)
+    })(|r| {     // <-|
+        stuff(r) //   |+-- this is `then_`
+    });          // <-|
 }
 ```
 
@@ -571,7 +574,7 @@ represents, when dealing with a factored out function, a shift between:
 
 Such a simple shift, but with so big consequences: since the callee gets to
 work with the value before it has to `return` and clean up its own locals, it
-gets to keep them, making everything _Just Work_.
+gets to keep them, making everything _Just Work™️_.
 
 <div style="width:100%;height:0;padding-bottom:60%;position:relative;"><iframe src="https://giphy.com/embed/2rqEdFfkMzXmo" width="100%" height="100%" style="position:absolute" frameBorder="0" class="giphy-embed" allowFullScreen></iframe></div><p><a href="https://giphy.com/gifs/stress-i-need-a-drink-brain-explode-2rqEdFfkMzXmo">via GIPHY</a></p>
 

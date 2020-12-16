@@ -1,7 +1,7 @@
 # The main problem: (bad) ergonomics.
 
-Indeed, these `with_` / Continuation-Passing style is doubly cumbersome, both
-for the caller and the callee:
+This `with_` Continuation-Passing style may be powerful and handy, but it is
+**horrendously cumbersome**, _both for the caller and the callee_!
 
   - ```rust
 {{#include snippets/cps-nested-refcell.rs}}
@@ -15,6 +15,16 @@ for the caller and the callee:
     ```rust,ignore
 {{#include snippets/cps-nested-refcell.rs:16:26}}
     ```
+
+      - That's not an easy to read signature:
+
+        > How quickly can one spot `&'local Bar`?
+
+        It's the actually "returned / yielded" value!
+
+        > What's this `-> R` noise?
+
+        Nothing relevant to the signature, for sure!
 
   - Wouldn't it be better if our pseudo-return value was in a more
     "return value"-looking place?
@@ -104,11 +114,11 @@ fn main ()                             // |
     ```rust,ignore
     let foo = { ... };
     let bar = {
-        ... // A: before the special let, same scope
+        ... // Area A: before the special let, same scope
         let var: ... 'special ... = function(/* args */);
-        ... // B: after the special let, *same* scope
+        ... // Area B: after the special let, same scope
     };
-    // C: after the special let, *outer* scope
+    // Area C: after the special let, *outer* scope
     let baz = { ... };
     ```
 
@@ -117,22 +127,22 @@ fn main ()                             // |
     ```rust,ignore
     let foo = { ... };
     let bar = {
-        ... // A
+        ... // Area A
         with_function(/* args */, |var| {
-            ... // B
+            ... // Area B
         })
     };
-    // C
+    // Area C
     let baz = { ... };
     ```
 
-    So, as you can see, all the remainders of the block the special `let` is
-    located in (`... // B`), need to be moved inside that generated _ad-hoc_
-    continuation closure, which thus requires the macro to be able to "butcher"
-    these blocks as it sees fit.
+    So, as you can see, all the remainders of the block in which the special
+    `let` is located (`... // Area B`), need to be moved inside that generated _ad-hoc_
+    continuation closure, which thus requires that the macro be able to
+    "butcher" these blocks as it sees fit.
 
     To achieve that, we need an attribute or a macro taking, _at least_, both
-    the `let` binding and the `... // B` remainder of the block.
+    the `let` binding and the `... // Area B` remainder of the block.
 
     That is, something (an **extra macro**) located _at least_, at an _outer_
     scope. A _preprocessor_, we could say, that will inspect the inner code,

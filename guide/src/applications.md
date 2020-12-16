@@ -18,7 +18,9 @@ tells it how it should be formatted. In other words, a **lazily** formatted
   }
 ```
 
-Sadly the intuitive approach fails here:
+Sadly the intuitive approach fails here (click on the <button class="fa fa-play
+play-button" hidden="" title="Run this code" aria-label="Run this code">
+</button> below to see the error).
 
 ```rust_compile_fail,editable
 use ::core::fmt::Display;
@@ -108,22 +110,22 @@ blog-post.
   - <details><summary>For those curious</summary>
 
     `Display` features the very same API that a
-    
+
     ```rust,ignore
                  Fn  (&mut fmt::Formatter<'_>) -> fmt::Result
     //           ^^
     //         vvvvv
     // fn fmt (&self, &mut fmt::Formatter<'_>) -> fmt::Result
     ```
-    
+
     closure does, and we can generate _ad-hoc_ instances and implementations of the
     latter.
-    
+
     So the only thing to do is to provide:
-    
+
       - a new-`type` bridging those two APIs together (to handle the
         implementation part),
-        
+
       - and a macro call (to handle the instanciation).
 
     ___
@@ -261,7 +263,7 @@ impl GetHandler for Foo {
     See the aforementioned post for more info:
 
     <details><summary>Example</summary>
-    
+
     ```rust,editable
     #![feature(
         generic_associated_types,
@@ -276,7 +278,7 @@ impl GetHandler for Foo {
             self: &'_ mut Self,
         ) -> Self::Handler<'_>
         ;
-        
+
         type Handler<'__> : FnMut(Self::Item);
     }
 
@@ -295,7 +297,7 @@ impl GetHandler for Foo {
                 self.sum += x;
             }
         }
-        
+
         type Handler<'__> = impl FnMut(i64);
     }
 
@@ -320,9 +322,9 @@ but ...
 
   - `&'_ mut (dyn FnMut...)`, which **does not require a heap allocation** 🎉
     (since replaced with a stack / local allocation), <details><summary>but does require ...</summary>
-    
+
     ... being able to return a local!
-    
+
     </details>
 
     ```rust,compile_fail,editable
