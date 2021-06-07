@@ -48,6 +48,7 @@ jobs:
         rust-toolchains:
           - 1.42.0
           - stable
+          - nightly
     steps:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -59,14 +60,22 @@ jobs:
       - name: Clone repo
         uses: actions/checkout@v2
 
-      - name: Cargo test (no UI)
+      - name: Cargo +nightly test (no UI)
+        if: matrix.rust-toolchains == 'nightly'
         uses: actions-rs/cargo@v1
         env:
-          RUSTC_BOOTSTRAP: "1"
           CI_SKIP_UI_TESTS: "1"
         with:
           command: test
           args: --features nightly
+
+      - name: Cargo test (no UI)
+        if: matrix.rust-toolchains != 'nightly'
+        uses: actions-rs/cargo@v1
+        env:
+          CI_SKIP_UI_TESTS: "1"
+        with:
+          command: test
 
   # == UI TESTS ==
   ui-test:
