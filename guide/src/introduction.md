@@ -36,6 +36,9 @@ fn get_dangling_iterator<'a> ()
     let v = vec![1, 2, 3];
     v.iter()
 }
+
+fn main ()
+{}
 ```
 
 Across this series of posts we will see how I managed to feature a

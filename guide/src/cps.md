@@ -9,6 +9,9 @@ fn get_dangling_reference<'a> ()
     let x = 0;
     &x
 }
+
+fn main ()
+{}
 ```
 
 fails, is that we are asking the function to produce some kind of reference,
@@ -21,7 +24,7 @@ own ~~mess~~ stack / its own set of local variables.
 
 To better illustrate this, let's inline the following call:
 
-```rust,compile_fail
+```rust,compile_fail,noplayground
 # use ::core::mem::drop as stuff;
 fn caller ()
 {
@@ -32,7 +35,7 @@ fn caller ()
 
 This, when inlined, becomes:
 
-```rust,compile_fail
+```rust,compile_fail,noplayground
 # use ::core::mem::drop as stuff;
 fn caller ()
 {
@@ -255,6 +258,9 @@ fn caller ()
     };                            // |
     stuff(r) // does not dangle! 🙌  |
 } // <-- here -----------------------+
+
+fn main ()
+{}
 ```
 
 This works, and is actually
