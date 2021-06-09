@@ -41,7 +41,7 @@ use self::{
 mod helpers;
 
 mod attrs;
-include!("handle_returning_locals.rs");
+mod handle_returning_locals;
 mod handle_let_bindings;
 mod wrap_statements_inside_closure_body;
 
@@ -115,7 +115,7 @@ fn handle_fn_like<Fun : FnLike> (
     outer_scope: Option<(&'_ Generics, ::func_wrap::ImplOrTrait<'_>)>
 ) -> Result<()>
 {
-    handle_returning_locals(fun, attrs, outer_scope)?;
+    handle_returning_locals::f(fun, attrs, outer_scope)?;
     if let Some(block) = fun.fields().block {
         handle_let_bindings::f(block, attrs)?;
     }

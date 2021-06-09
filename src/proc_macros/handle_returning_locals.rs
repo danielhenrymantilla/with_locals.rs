@@ -1,15 +1,20 @@
+use super::*;
+
+pub(in super) use handle_returning_locals as f;
+
+pub(in super)
 fn handle_returning_locals (
     fun: &'_ mut impl helpers::FnLike,
     with_attrs: &'_ Attrs,
     outer_scope: Option<(&'_ Generics, ::func_wrap::ImplOrTrait<'_>)>,
 ) -> Result<()>
 {Ok({
-    let     &Attrs {
+    let         &Attrs {
         ref lifetime,
         ref continuation,
         dyn_safe,
         recursive,
-            } = with_attrs
+                } = with_attrs
     ;
     fun.fields().attrs.push(parse_quote! {
         #[allow(
@@ -32,6 +37,7 @@ fn handle_returning_locals (
         }
     ;
     let fun = fun.fields();
+    unelide_lifetimes(fun.sig, lifetime)?;
     let ret_ty =
         if let ReturnType::Type(_, ref mut it) = fun.sig.output { it } else {
             // Nothing to do
@@ -254,16 +260,18 @@ fn handle_returning_locals (
                             // recurse
                             self.visit_expr_mut(inner_expr);
                             *expr = parse_quote! {
-                                match #inner_expr { it => match #Try::into_result(it) {
-                                    | #Ok_(it) => it,
-                                    | #Err_(err) => {
-                                        return __continuation__(
-                                            #Try::from_err(
-                                                #Into::into(err)
-                                            )
-                                        );
-                                    },
-                                }}
+                                match #inner_expr {
+                                    it => match #Try::into_result(it) {
+                                        | #Ok_(it) => it,
+                                        | #Err_(err) => {
+                                            return __continuation__(
+                                                #Try::from_err(
+                                                    #Into::into(err)
+                                                )
+                                            );
+                                        },
+                                    }
+                                }
                             };
                         },
 
@@ -341,7 +349,6 @@ fn handle_returning_locals (
             proc_macro_use! {
                 use $krate::{FnMut, None_};
             }
-            // handle_let_bindings::f(block, with_attrs)?;
             let mut wrapped_func_call = match ::func_wrap::func_wrap(
                 sig,
                 ::core::mem::replace(block, parse_quote!( {} )),
@@ -369,7 +376,7 @@ fn handle_returning_locals (
             }
             *wrapped_func_call.call_site_args.last_mut().unwrap() =
                 parse_quote!(
-                    &mut |__ret__: #ret| -> (/* Ensure this is not generic */) {
+                    &mut |__ret__: #ret| -> (/* Ensure this isn't generic */) {
                         __ret_slot__ = #Some_(#continuation_name(__ret__));
                     }
                 )
@@ -419,3 +426,296 @@ fn handle_returning_locals (
         });
     }
 })}
+
+fn unelide_lifetimes (sig: &'_ mut Signature, special_lifetime: &'_ str)
+  -> Result<()>
+{
+    fn mk_named_lifetime (span: Span)
+      -> Lifetime
+    {
+        Lifetime::new("'__elided", span)
+    }
+
+    let has_receiver = sig.receiver().is_some();
+    let         &mut Signature {
+        ref mut inputs,
+        ref mut output,
+        ref mut generics,
+                ..} = sig
+    ;
+    let mut unit: Type;
+    let output: &mut Type =
+        if let ReturnType::Type(_, ref mut ty) = *output {
+            &mut **ty
+        } else {
+            unit = parse_quote!( () );
+            &mut unit
+        }
+    ;
+    if has_receiver {
+        let mut elided_lifetime_in_receiver_case =
+            |and: &'_ Token![&], mb_lifetime: &'_ mut Option<Lifetime>| {
+                let storage;
+                let lifetime = match *mb_lifetime {
+                    | Some(ref lt) if lt.ident != "_" => lt,
+                    | _ => {
+                        storage = mk_named_lifetime(
+                            mb_lifetime
+                                .as_ref()
+                                .map_or_else(|| and.span(), |lt| lt.span())
+                        );
+                        let lifetime = &storage;
+                        generics.params.push(parse_quote!(
+                            #lifetime
+                        ));
+                        *mb_lifetime = Some(lifetime.clone());
+                        lifetime
+                    },
+                };
+                replace_each_lifetime_with(output, &mut |span, name| {
+                    if name.is_some() { return None; }
+                    Some(Lifetime {
+                        apostrophe: span,
+                        ident: lifetime.ident.clone(),
+                    })
+                });
+                Ok(())
+            }
+        ;
+        match inputs.iter_mut().next() {
+            | Some(FnArg::Receiver(Receiver {
+                reference: Some((ref and, ref mut mb_lifetime)),
+                ..
+            }))
+            => {
+                return elided_lifetime_in_receiver_case(and, mb_lifetime);
+            },
+
+            | Some(FnArg::Typed(PatType {
+                pat: _, /* if we are here we know the `pat` is `self` */
+                ref mut ty,
+                ..
+            }))
+            => match **ty {
+                | Type::Reference(TypeReference {
+                    and_token: ref and,
+                    lifetime: ref mut mb_lifetime,
+                    ..
+                })
+                => {
+                    return elided_lifetime_in_receiver_case(and, mb_lifetime);
+                },
+                | _ => {},
+            },
+
+            | _ => {},
+        }
+    }
+
+    // Vec with spans pointing to elided lifetimes.
+    let (mut first_span, mut last_span) = (None, None);
+    let mut elided_lifetimes_count = 0;
+    let ref mut named_lifetimes = ::std::collections::HashSet::<Ident>::new();
+    inputs
+        .iter_mut()
+        .for_each(|fn_arg| match *fn_arg {
+            | FnArg::Typed(PatType { ref mut ty, .. }) => {
+                replace_each_lifetime_with(ty, &mut |span, name| {
+                    let _ = first_span.get_or_insert(span);
+                    last_span = Some(span);
+                    if let Some(name) = name {
+                        named_lifetimes.insert(name.clone());
+                        None
+                    } else {
+                        elided_lifetimes_count += 1;
+                        Some(mk_named_lifetime(span))
+                    }
+                });
+            },
+            | FnArg::Receiver(_) => {
+                // No interesting lifetimes to be encountered here,
+                // otherwise the `if has_receiver` short-circuiting branch
+                // would have caught it.
+                // Thus, continue / pass.
+                return;
+            },
+        })
+    ;
+    if let Some(span) = first_span {
+        // There was at least one elided lifetime replaced with
+        // `mk_named_lifetime`, thus introduce that name within the generic
+        // lifetime params.
+        let lifetime = mk_named_lifetime(span);
+        generics.params.push(parse_quote!(
+            #lifetime
+        ));
+    }
+    let input_lifetime_params_count = <usize as ::core::ops::Add>::add(
+        elided_lifetimes_count,
+        named_lifetimes.len(),
+    );
+    let mut lifetime_cannot_be_derived_from_arguments = None;
+    replace_each_lifetime_with(output, &mut |span, name| {
+        if name.is_some() { return None; }
+        if input_lifetime_params_count != 1 {
+            lifetime_cannot_be_derived_from_arguments = Some(span);
+            None
+        } else {
+            Some(if let Some(ident) = named_lifetimes.iter().next() {
+                Lifetime {
+                    apostrophe: span,
+                    ident: ident.clone(),
+                }
+            } else {
+                mk_named_lifetime(span)
+            })
+        }
+    });
+    if let Some(err_span) = lifetime_cannot_be_derived_from_arguments {
+        Err(match (first_span, last_span) {
+            | (Some(first_span), Some(last_span)) => {
+                let mut err = Error::new(err_span, "\
+                    \n\
+                    error[E0106]: missing lifetime specifier
+                ");
+                let extra_err_msg = format!(
+                    "\
+                    \n\
+                    help: this function's return type contains a borrowed \
+                    value, but the signature does not say which one of the \
+                    arguments' {} lifetimes it is borrowed from\n\
+                    help: specify it using explicitly named lifetime \
+                    parameters\
+                    ",
+                    input_lifetime_params_count,
+                );
+                // Hacks to give the error message more complex / advanced spans
+                // (ideally it should be pointing to the elided lifetimes).
+                use ::proc_macro2::*;
+                fn mk_dummy_token (span: Span)
+                  -> TokenTree
+                {
+                    let mut p = Punct::new('.', Spacing::Alone);
+                    p.set_span(span);
+                    p.into()
+                }
+                err.combine(Error::new_spanned(
+                    Iterator::chain(
+                        ::core::iter::once(mk_dummy_token(first_span)),
+                        ::core::iter::once(mk_dummy_token(last_span)),
+                    ).collect::<TokenStream2>(),
+                    extra_err_msg,
+                ));
+                err
+            },
+            #[cfg(debug_assertions)]
+            | (Some(_), None) | (None, Some(_)) => unreachable!(),
+            | _ => {
+                let err_msg = format!(
+                    "\
+                    \n\
+                    error[E0106]: missing lifetime specifier\n \
+                    help: this function's return type contains a borrowed \
+                    value, but there is no value for it to be borrowed from\n \
+                    help: consider using the `'static` lifetime, or the \
+                    function-local lifetime, `'{}`\
+                    ",
+                    special_lifetime,
+                );
+                Error::new(err_span, err_msg)
+            },
+        })
+    } else {
+        Ok(())
+    }
+}
+
+type Cb<'__> = &'__ mut (
+    dyn FnMut(Span, /* name: */ Option<&'_ Ident>) -> Option<Lifetime>
+);
+
+fn replace_each_lifetime_with (
+    ty: &'_ mut Type,
+    f: Cb<'_>,
+)
+{
+    struct LifetimeVisitor<'__>(Cb<'__>);
+    impl VisitMut for LifetimeVisitor<'_> {
+        fn visit_lifetime_mut (
+            self: &'_ mut Self,
+            lifetime: &'_ mut Lifetime,
+        )
+        {
+            let name =
+                if lifetime.ident == "_" {
+                    None
+                } else {
+                    Some(&lifetime.ident)
+                }
+            ;
+            if let Some(new_lifetime) = (self.0)(lifetime.span(), name) {
+                *lifetime = new_lifetime;
+            }
+        }
+
+        fn visit_type_mut (
+            self: &'_ mut Self,
+            ty: &'_ mut Type,
+        )
+        {
+            match *ty {
+                | Type::Reference(TypeReference {
+                    and_token: ref and,
+                    lifetime: ref mut implicitly_elided_lifetime @ None,
+                    elem: ref mut referee,
+                    ..
+                }) => {
+                    if let Some(new_lifetime) = (self.0)(and.span(), None) {
+                        *implicitly_elided_lifetime = Some(new_lifetime);
+                        // subrecurse only on the referee, not the newly
+                        // introduced lifetime.
+                        self.visit_type_mut(referee);
+                        return;
+                    }
+                },
+                | Type::BareFn(_) => {
+                    /* do nothing */
+                    return; // do not sub-recurse
+                },
+                | Type::TraitObject(ref mut trait_object) => {
+                    trait_object.bounds.iter_mut().for_each(|it| match *it {
+                        | TypeParamBound::Lifetime(ref mut lifetime) => {
+                            // Explicit `+ '_`  elision overrides the
+                            // special one of trait objects, leading to
+                            // classic elision rules to kick in:
+                            self.visit_lifetime_mut(lifetime);
+                        },
+                        | TypeParamBound::Trait(TraitBound {
+                            ref mut path,
+                            ..
+                        }) => {
+                            self.visit_path_mut(path)
+                        },
+                    });
+                    return; // do not sub-recurse
+                },
+                | _ => {},
+            }
+            // Sub-recurse
+            ::syn::visit_mut::visit_type_mut(self, ty);
+        }
+
+        // `Fn…()` traits behave like `TypeBareFn`: their elided lifetimes
+        // follow higher-order rules.
+        fn visit_parenthesized_generic_arguments_mut (
+            self: &'_ mut Self,
+            _: &'_ mut ParenthesizedGenericArguments,
+        )
+        {
+            /* Do nothing, _i.e._, skip it */
+        }
+    }
+    LifetimeVisitor(f)
+        .visit_type_mut(ty)
+    ;
+}
