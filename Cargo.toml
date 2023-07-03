@@ -1,6 +1,6 @@
 [package]
 name = "with_locals"
-version = "0.3.1"  # Keep in sync with `proc_macros`
+version = "0.3.2"  # Keep in sync with `proc_macros`
 authors = [
     "Daniel Henry-Mantilla <daniel.henry.mantilla@gmail.com>",
 ]
@@ -29,15 +29,14 @@ categories = [
 [dependencies.proc_macros]
 path = "src/proc_macros"
 package = "with_locals-proc_macros"
-version = "0.3.1"
+version = "0.3.2"  # Keep in sync with `proc_macros`
 
 [features]
 nightly = []
 expand-macros = ["proc_macros/expand-macros"]
 
 [dev-dependencies]
-trybuild = "1.0.33"
-rustversion = "1.0.3"
+trybuild = "1.0.80"
 
 [package.metadata.docs.rs]
 features = ["nightly"]

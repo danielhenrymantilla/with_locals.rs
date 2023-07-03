@@ -117,6 +117,7 @@ fn pretty_print_tokenstream (
     {Some({
         let mut child =
             ::std::process::Command::new("rustfmt")
+                .args(&["--edition", "2018"])
                 .stdin(::std::process::Stdio::piped())
                 .stdout(::std::process::Stdio::piped())
                 .stderr(::std::process::Stdio::piped())
@@ -140,17 +141,7 @@ fn pretty_print_tokenstream (
             .map_or(true, |ref filter| fname.contains(filter))
     {
         if let Some(ref formatted) = try_format(&code.to_string()) {
-            // It's formatted, now let's try to also colorize it:
-            if  ::bat::PrettyPrinter::new()
-                    .input_from_bytes(formatted.as_ref())
-                    .language("rust")
-                    .true_color(false)
-                    .print()
-                    .is_err()
-            {
-                // Fallback to non-colorized-but-formatted output.
-                println!("{}", formatted);
-            }
+            println!("{}", formatted);
         } else {
             // Fallback to raw output.
             println!("{}", code);

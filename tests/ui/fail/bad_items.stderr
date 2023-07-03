@@ -1,41 +1,55 @@
 error: `#[with]` can only be applied to an `fn`, a `trait`, or an `impl`.
-  --> $DIR/bad_items.rs:30:5
+  --> tests/ui/fail/bad_items.rs:30:5
    |
 30 |     #[with]
    |     ^^^^^^^
+   |
+   = note: this error originates in the attribute macro `with` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error: `#[with]` can only be applied to an `fn`, a `trait`, or an `impl`.
-  --> $DIR/bad_items.rs:25:5
+  --> tests/ui/fail/bad_items.rs:25:5
    |
 25 |     #[with]
    |     ^^^^^^^
+   |
+   = note: this error originates in the attribute macro `with` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error: `#[with]` can only be applied to an `fn`, a `trait`, or an `impl`.
-  --> $DIR/bad_items.rs:20:5
+  --> tests/ui/fail/bad_items.rs:20:5
    |
 20 |     #[with]
    |     ^^^^^^^
+   |
+   = note: this error originates in the attribute macro `with` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error: `#[with]` can only be applied to an `fn`, a `trait`, or an `impl`.
-  --> $DIR/bad_items.rs:15:5
+  --> tests/ui/fail/bad_items.rs:15:5
    |
 15 |     #[with]
    |     ^^^^^^^
+   |
+   = note: this error originates in the attribute macro `with` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error: `#[with]` can only be applied to an `fn`, a `trait`, or an `impl`.
-  --> $DIR/bad_items.rs:10:5
+  --> tests/ui/fail/bad_items.rs:10:5
    |
 10 |     #[with]
    |     ^^^^^^^
+   |
+   = note: this error originates in the attribute macro `with` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error: `#[with]` can only be applied to an `fn`, a `trait`, or an `impl`.
- --> $DIR/bad_items.rs:6:1
+ --> tests/ui/fail/bad_items.rs:6:1
   |
 6 | #[with]
   | ^^^^^^^
+  |
+  = note: this error originates in the attribute macro `with` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error: `#[with]` can only be applied to an `fn`, a `trait`, or an `impl`.
- --> $DIR/bad_items.rs:3:1
+ --> tests/ui/fail/bad_items.rs:3:1
   |
 3 | #[with]
   | ^^^^^^^
+  |
+  = note: this error originates in the attribute macro `with` (in Nightly builds, run with -Z macro-backtrace for more info)
