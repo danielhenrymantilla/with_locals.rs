@@ -5,19 +5,11 @@ fn trybuild ()
         ::std::path::Path::new("tests")
             .join("ui")
     ;
-    let nightly = {
-        fn _it () -> bool
-        {
-            ::std::env::var("RUSTC_BOOTSTRAP")
-                .ok()
-                .map_or(false, |s| s == "1")
-        }
-        {
-            #[::rustversion::nightly]
-            fn _it () -> bool { true }
-            _it()
-        }
-    };
+    let nightly =
+        ::std::env::var("RUSTC_BOOTSTRAP")
+            .ok()
+            .map_or(false, |s| s == "1")
+    ;
     ::trybuild::TestCases::new()
         .pass(
             tests_ui

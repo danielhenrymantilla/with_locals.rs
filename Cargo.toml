@@ -37,7 +37,6 @@ expand-macros = ["proc_macros/expand-macros"]
 
 [dev-dependencies]
 trybuild = "1.0.80"
-rustversion = "1.0.12"
 
 [package.metadata.docs.rs]
 features = ["nightly"]
