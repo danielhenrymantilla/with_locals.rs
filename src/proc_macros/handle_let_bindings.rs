@@ -112,7 +112,7 @@ impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
                             Ok(Some(dyn_safe)) => self.dyn_safe_calls = dyn_safe,
                             Ok(None) => {},
                             Err(err) => {
-                                panic!(*self.encountered_error = Some(err));
+                                ::std::panic::panic_any(*self.encountered_error = Some(err));
                             },
                         }
                         false // remove attr
@@ -282,9 +282,9 @@ impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
                     )
                     {
                         | Ok(it) => it,
-                        | Err(err) => panic! {
-                            *self.encountered_error = Some(err)
-                        },
+                        | Err(err) => ::std::panic::panic_any({
+                            *self.encountered_error = Some(err);
+                        }),
                     }
             ;
 
@@ -361,7 +361,7 @@ impl VisitMut for ReplaceLetBindingsWithCbCalls<'_> {
     )
     {
         if attr.path.is_ident("with") {
-            panic!(*self.encountered_error = Some(Error::new(
+            ::std::panic::panic_any(*self.encountered_error = Some(Error::new(
                 attr.span(),
                 "`#[with]` must be applied to a `let` binding.",
             )));
