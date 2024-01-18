@@ -24,19 +24,19 @@ jobs:
             locked: --locked
     steps:
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        id: toolchain
+        uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
           toolchain: ${{ matrix.rust-toolchains }}
-          override: true
+
+      - name: Override toolchain
+        run: rustup override set ${{ steps.toolchain.outputs.name }}
 
       - name: Clone repo
         uses: actions/checkout@v4
 
       - name: Cargo check
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
+        run: cargo check
 
   # == BUILD & TEST == #
   build-and-test:
@@ -56,32 +56,28 @@ jobs:
           - nightly
     steps:
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        id: toolchain
+        uses: dtolnay/rust-toolchain@master
         with:
-          profile: default
-          override: true
           toolchain: ${{ matrix.rust-toolchains }}
+
+      - name: Override toolchain
+        run: rustup override set ${{ steps.toolchain.outputs.name }}
 
       - name: Clone repo
         uses: actions/checkout@v4
 
       - name: Cargo +nightly test (no UI)
         if: matrix.rust-toolchains == 'nightly'
-        uses: actions-rs/cargo@v1
         env:
           CI_SKIP_UI_TESTS: "1"
-        with:
-          command: test
-          args: ${{ matrix.locked }} --features nightly
+        run: cargo test ${{ matrix.locked }} --features nightly
 
       - name: Cargo test (no UI)
         if: matrix.rust-toolchains != 'nightly'
-        uses: actions-rs/cargo@v1
         env:
           CI_SKIP_UI_TESTS: "1"
-        with:
-          command: test
-          args: ${{ matrix.locked }}
+        run: cargo test ${{ matrix.locked }}
 
   # == UI TESTS ==
   ui-test:
@@ -89,20 +85,16 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-and-test]
     steps:
-        - name: Install Rust toolchain
-          uses: actions-rs/toolchain@v1
-          with:
-            profile: default
-            override: true
-            toolchain: 1.65.0
+      - name: Install Rust toolchain
+        id: toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.65.0
 
-        - name: Clone repo
-          uses: actions/checkout@v4
+      - name: Clone repo
+        uses: actions/checkout@v4
 
-        - name: Cargo UI test
-          uses: actions-rs/cargo@v1
-          env:
-            RUSTC_BOOTSTRAP: 1
-          with:
-            command: test
-            args: ${{ matrix.locked }} -- trybuild
+      - name: Cargo UI test
+        env:
+          RUSTC_BOOTSTRAP: 1
+        run: cargo test ${{ matrix.locked }} -- trybuild
