@@ -5,9 +5,9 @@ on:
     - cron: '0 8 * * 1,5'
 
 jobs:
-  # == TEST (No UI) == #
+  # == TEST (NO UI) == #
   test-no-ui:
-    name: (Check & Build &) Test (No UI)
+    name: Test (no UI)
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
