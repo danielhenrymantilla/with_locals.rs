@@ -17,6 +17,7 @@ jobs:
           - 1.65.0
           - stable
           - beta
+          - nightly
     steps:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -48,6 +49,7 @@ jobs:
         rust-toolchains:
           - 1.65.0
           - stable
+          - beta
           - nightly
     steps:
       - name: Install Rust toolchain
