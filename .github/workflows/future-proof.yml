@@ -31,7 +31,7 @@ jobs:
           toolchain: ${{ matrix.rust-toolchains }}
 
       - name: Clone repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Cargo +nightly test (no UI)
         if: matrix.rust-toolchains == 'nightly'

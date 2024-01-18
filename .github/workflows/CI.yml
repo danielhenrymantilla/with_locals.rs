@@ -31,7 +31,7 @@ jobs:
           override: true
 
       - name: Clone repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Cargo check
         uses: actions-rs/cargo@v1
@@ -63,7 +63,7 @@ jobs:
           toolchain: ${{ matrix.rust-toolchains }}
 
       - name: Clone repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Cargo +nightly test (no UI)
         if: matrix.rust-toolchains == 'nightly'
@@ -97,7 +97,7 @@ jobs:
             toolchain: 1.65.0
 
         - name: Clone repo
-          uses: actions/checkout@v2
+          uses: actions/checkout@v4
 
         - name: Cargo UI test
           uses: actions-rs/cargo@v1
