@@ -1,9 +1,6 @@
 name: Cron CI
 
 on:
-  push:
-    branches:
-      - master
   schedule:
     - cron: '0 8 * * 1,5'
 
