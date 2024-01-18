@@ -17,6 +17,7 @@ jobs:
           - 1.65.0
           - stable
           - beta
+          - nightly
         locked: ['']
         include:
           - rust-toolchains: 1.65.0
