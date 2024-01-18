@@ -36,7 +36,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Cargo check
-        run: cargo check
+        run: cargo check --verbose
 
   # == BUILD & TEST == #
   build-and-test:
@@ -71,13 +71,13 @@ jobs:
         if: matrix.rust-toolchains == 'nightly'
         env:
           CI_SKIP_UI_TESTS: "1"
-        run: cargo test ${{ matrix.locked }} --features nightly
+        run: cargo test ${{ matrix.locked }} --verbose --features nightly
 
       - name: Cargo test (no UI)
         if: matrix.rust-toolchains != 'nightly'
         env:
           CI_SKIP_UI_TESTS: "1"
-        run: cargo test ${{ matrix.locked }}
+        run: cargo test ${{ matrix.locked }} --verbose
 
   # == UI TESTS ==
   ui-test:
@@ -97,4 +97,4 @@ jobs:
       - name: Cargo UI test
         env:
           RUSTC_BOOTSTRAP: 1
-        run: cargo test ${{ matrix.locked }} -- trybuild
+        run: cargo test ${{ matrix.locked }} --verbose -- trybuild

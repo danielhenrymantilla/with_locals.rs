@@ -39,10 +39,10 @@ jobs:
         if: matrix.rust-toolchains == 'nightly'
         env:
           CI_SKIP_UI_TESTS: "1"
-        run: cargo test --features nightly
+        run: cargo test --verbose --features nightly
 
       - name: Cargo test (no UI)
         if: matrix.rust-toolchains != 'nightly'
         env:
           CI_SKIP_UI_TESTS: "1"
-        run: cargo test
+        run: cargo test --verbose
