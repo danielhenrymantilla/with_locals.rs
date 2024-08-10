@@ -289,12 +289,12 @@ when (and where!) to work**:
 
 ### Remarks
 
-  - ~~By default, the ["special lifetime"] is `'special`. Indeed, since `ref` is a
+  - ~~By default, the ["special lifetime"] is `'ref`. Indeed, since `ref` is a
     Rust keyword, it is not a legal lifetime name, so it is impossible for it
     to conflict with some real lifetime parameter equally named.~~
 
     EDIT: an update to Rust and `rustc` has made it so not even macros can use
-    such lifetime names. So `'special` and the like are no longer legal.
+    such lifetime names. So `'ref` and the like are no longer legal.
 
   - But `#[with]` allows you to rename that lifetime to one of your liking, by
     providing it as the first parameter of the attribute (the one applied to
