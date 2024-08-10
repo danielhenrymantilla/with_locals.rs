@@ -20,8 +20,6 @@ jobs:
           - macos-latest
           - windows-latest
         rust-toolchains:
-          - 1.65.0
-          - stable
           - beta
           - nightly
     steps:

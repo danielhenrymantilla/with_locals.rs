@@ -17,6 +17,10 @@ jobs:
           - 1.65.0
           - stable
           - beta
+        locked: ['']
+        include:
+          - rust-toolchains: 1.65.0
+            locked: --locked
     steps:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -67,7 +71,7 @@ jobs:
           CI_SKIP_UI_TESTS: "1"
         with:
           command: test
-          args: --features nightly
+          args: ${{ matrix.locked }} --features nightly
 
       - name: Cargo test (no UI)
         if: matrix.rust-toolchains != 'nightly'
@@ -76,6 +80,7 @@ jobs:
           CI_SKIP_UI_TESTS: "1"
         with:
           command: test
+          args: ${{ matrix.locked }}
 
   # == UI TESTS ==
   ui-test:
@@ -99,4 +104,4 @@ jobs:
             RUSTC_BOOTSTRAP: 1
           with:
             command: test
-            args: -- trybuild
+            args: ${{ matrix.locked }} -- trybuild
