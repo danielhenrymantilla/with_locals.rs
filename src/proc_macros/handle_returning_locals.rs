@@ -408,6 +408,7 @@ fn handle_returning_locals (
         if continuation.is_some() {
             // Requires Rust 1.40.0
             block_prefix.extend(quote! {
+                #[allow(unused)]
                 macro_rules! #continuation_name { ($expr:expr) => (
                     return #continuation_name($expr)
                 )}

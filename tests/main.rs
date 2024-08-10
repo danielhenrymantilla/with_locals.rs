@@ -6,11 +6,11 @@ extern crate with_locals;
 use ::core::fmt::Display;
 
 #[test]
-#[with]
+#[with('local)]
 fn hex ()
 {
-    #[with]
-    fn hex (n: u32) -> &'ref dyn Display
+    #[with('local)]
+    fn hex (n: u32) -> &'local dyn Display
     {
         &format_args!("{:#x}", n)
     }
@@ -48,7 +48,7 @@ mod to_str {
     }
 
     #[test]
-    #[with]
+    #[with('local)]
     fn basic ()
     {
 
@@ -59,13 +59,13 @@ mod to_str {
     }
 
     #[test]
-    #[with]
+    #[with('local)]
     fn romans ()
     {
 
         struct Roman(u8); impl ToStr for Roman {
-            #[with]
-            fn to_str (self: &'_ Self) -> &'ref str
+            #[with('local)]
+            fn to_str (self: &'_ Self) -> &'local str
             {
                 let mut buf = [b' '; 1 + 4 + 4];  // C LXXX VIII or CC XXX VIII
                 let mut start = buf.len();
@@ -128,15 +128,15 @@ mod to_str {
 }
 
 #[test]
-#[with]
+#[with('local)]
 fn loops ()
 {
     use ::core::cell::RefCell;
 
     trait Iterable {
-        #[with]
+        #[with('local)]
         fn next (self: &'_ mut Self)
-          -> Option<&'ref i32>
+          -> Option<&'local i32>
         ;
     }
 
@@ -147,9 +147,9 @@ fn loops ()
         // where
         struct Ret<'__> (::core::slice::Iter<'__, RefCell<i32>>);
         impl Iterable for Ret<'_> {
-            #[with]
+            #[with('local)]
             fn next (self: &'_ mut Self)
-              -> Option<&'ref i32>
+              -> Option<&'local i32>
             {
                 Some(&*self.0.next()?.borrow())
             }
@@ -221,28 +221,28 @@ fn loops ()
 }
 
 #[test]
-#[with('ref)]
+#[with('local)]
 fn recursive ()
 {
     /// Recursive
-    #[with(recursive = true)]
-    fn recursive_f (recurse: bool) -> &'ref ()
+    #[with('local, recursive = true)]
+    fn recursive_f (recurse: bool) -> &'local ()
     {
         if recurse {
-            let _: &'ref _ = recursive_f(false);
+            let _: &'local _ = recursive_f(false);
         }
         &()
     }
-    let _it: &'ref () = recursive_f(true);
+    let _it: &'local () = recursive_f(true);
 }
 
 #[test]
-#[with]
+#[with('local)]
 fn object_safe ()
 {
-    #[with(dyn_safe = true)]
+    #[with('local, dyn_safe = true)]
     trait DynSafe {
-        fn foo (&self) -> &'ref ()
+        fn foo (&self) -> &'local ()
         {
             &()
         }
@@ -250,6 +250,6 @@ fn object_safe ()
     impl DynSafe for () {}
     let dyn_obj: &'_ dyn DynSafe = &();
     #[with(dyn_safe)]
-    let _: &'ref () = dyn_obj.foo();
+    let _: &'local () = dyn_obj.foo();
     return;
 }

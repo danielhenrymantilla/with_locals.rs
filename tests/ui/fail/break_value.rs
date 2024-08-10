@@ -1,12 +1,12 @@
 include!("../prelude.rs");
 
-#[with]
+#[with('local)]
 fn break_value ()
 {
-    #[with] fn f () -> &'ref () { &() }
+    #[with('local)] fn f () -> &'local () { &() }
 
     for n in 0 .. {
-        let _: &'ref _ = f();
+        let _: &'local _ = f();
         if n >= 5 {
             break ();
         }

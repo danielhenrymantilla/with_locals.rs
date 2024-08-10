@@ -4,17 +4,17 @@ include!("../prelude.rs");
 
 use ::core::fmt::Display;
 
-#[with]
+#[with('local)]
 fn empty ()
 {}
 
-#[with]
-fn returns_local (n: u32) -> &'ref dyn Display
+#[with('local)]
+fn returns_local (n: u32) -> &'local dyn Display
 {
     &format_args!("{:#x}", n)
 }
 
-#[with]
+#[with('local)]
 fn uses_returns_local (n: u32)
 {
     #[with]
@@ -22,9 +22,9 @@ fn uses_returns_local (n: u32)
     let _ = it.to_string();
 }
 
-#[with]
+#[with('local)]
 fn uses_returns_local_and_returns_a_local_too (n: u32)
-  -> &'ref str
+  -> &'local str
 {
     #[with]
     let it: &dyn Display = returns_local(n);
@@ -32,9 +32,9 @@ fn uses_returns_local_and_returns_a_local_too (n: u32)
     &*s
 }
 
-#[with]
+#[with('local)]
 fn inside_if_uses_return_local_and_returns_a_local_itself (n: u32)
-  -> &'ref str
+  -> &'local str
 {
     if true {
         #[with]
@@ -46,9 +46,9 @@ fn inside_if_uses_return_local_and_returns_a_local_itself (n: u32)
     }
 }
 
-#[with]
+#[with('local)]
 fn inside_if_yadda_early_return (n: u32)
-  -> &'ref str
+  -> &'local str
 {
     if true {
         #[with]
@@ -61,9 +61,9 @@ fn inside_if_yadda_early_return (n: u32)
     ""
 }
 
-#[with]
+#[with('local)]
 fn inside_match_uses_return_local_and_returns_a_local_too (n: u32)
-  -> &'ref str
+  -> &'local str
 {
     match true {
         | true => {
@@ -76,11 +76,11 @@ fn inside_match_uses_return_local_and_returns_a_local_too (n: u32)
     }
 }
 
-#[with]
+#[with('local)]
 fn results ()
 {
-    #[with]
-    fn result () -> Result<&'ref (), ()>
+    #[with('local)]
+    fn result () -> Result<&'local (), ()>
     {
         Err(())?;
         Ok(&())
@@ -96,13 +96,13 @@ const _: () = {
     enum Void {}
     type None = Option<Void>;
 
-    #[with]
+    #[with('local)]
     fn question_marks ()
       -> None
     {
-        #[with]
+        #[with('local)]
         fn options ()
-          -> Option<Option<Option<&'ref ()>>>
+          -> Option<Option<Option<&'local ()>>>
         {
             fn _item_inside_function_body ()
               -> Option<()>
@@ -133,44 +133,44 @@ const _: () = {
     }
 };
 
-#[with]
+#[with('local)]
 fn loops ()
 {
-    #[with] fn f () -> &'ref () { &() }
+    #[with('local)] fn f () -> &'local () { &() }
 
     loop {
-        let it: &'ref () = f();
+        let it: &'local () = f();
         if false { continue; }
         if false { break; }
         if false { break (); }
         if true { return; }
-        drop(it);
+        let _ = (it, );
     }
 
     for _ in 0 .. {
-        let it: &'ref () = f();
+        let it: &'local () = f();
         if false { continue; }
         if false { break; }
         // if false { break (); }
         if true { return; }
-        drop(it);
+        let _ = (it, );
     }
 
     while false {
-        let it: &'ref () = f();
+        let it: &'local () = f();
         if false { continue; }
         if false { break; }
         // if false { break (); }
         if true { return; }
-        drop(it);
+        let _ = (it, );
     }
 
     while let 1 ..= 1 = 2 {
-        let it: &'ref () = f();
+        let it: &'local () = f();
         if false { continue; }
         if false { break; }
         // if false { break (); }
         if true { return; }
-        drop(it);
+        let _ = (it, );
     }
 }

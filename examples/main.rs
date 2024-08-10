@@ -3,8 +3,8 @@ use ::core::fmt::Display;
 use ::with_locals::with;
 
 /// A basic example: returning / yielding a `format_args` local.
-#[with]
-fn hex (n: u32) -> &'ref dyn Display
+#[with('local)]
+fn hex (n: u32) -> &'local dyn Display
 {
     &format_args!("{:#x}", n)
 }
@@ -68,9 +68,9 @@ no_run! {
 
     // Or, equivalently:
 
-    let one: &'ref _ = hex(1);
-    let two: &'ref _ = hex(2);
-    let three: &'ref _ = hex(3);
+    let one: &'local _ = hex(1);
+    let two: &'local _ = hex(2);
+    let three: &'local _ = hex(3);
     //          ^^^^^
     //          special lifetime is equivalent to marking the
     //          `let` binding with `#[with]`.
@@ -83,12 +83,12 @@ no_run! {
     // Here is an example:
 }
 
-#[with]
+#[with('local)]
 fn hex_example ()
 {
     let s: String = {
         println!("Hello, World!");
-        let s_hex: &'ref _ = hex(66);
+        let s_hex: &'local _ = hex(66);
         println!("s_hex = {}", s_hex);
         let s = s_hex.to_string();
         assert_eq!(s, "0x42");
@@ -113,19 +113,19 @@ no_run! {
 
 /// Traits can have `#[with]`-annotated methods too.
 trait ToStr {
-    #[with]
-    fn to_str (self: &'_ Self) -> &'ref str
+    #[with('local)]
+    fn to_str (self: &'_ Self) -> &'local str
     ;
 }
 
 /// Example of a user of of the trait (≠ an implementor).
 impl<T : ToStr> Display for Displayable<T> {
-    #[with] // you can #[with]-annotate classic function,
-            // in order to get the `let` assignment magic :)
+    #[with('local)] // you can #[with]-annotate classic function,
+                    // in order to get the `let` assignment magic :)
     fn fmt (self: &'_ Self, fmt: &'_ mut ::core::fmt::Formatter<'_>)
       -> ::core::fmt::Result
     {
-        let s: &'ref str = self.0.to_str();
+        let s: &'local str = self.0.to_str();
         fmt.write_str(s)
     }
 }
@@ -137,10 +137,10 @@ impl ToStr for u32 {
     #[with('local)] // At any point, you can choose to use another name
                     // for the special lifetime that tells the attribute to
                     // transform the function into a `with_...` one.
-                    // By default, that name is `'ref`, since it is currently
+                    // By default, that name is `'local`, since it is currently
                     // forbidden by the compiler, and I find it quite on point.
                     //
-                    // But when `self` receivers are involved, this `'ref`
+                    // But when `self` receivers are involved, this `'local`
                     // name may be confusing. If you feel that's the case,
                     // feel free to rename it :)
     fn to_str (self: &'_ u32) -> &'local str
@@ -169,12 +169,12 @@ impl ToStr for u32 {
     }
 }
 
-#[with]
+#[with('local)]
 fn main ()
 {
     hex_example();
 
-    let n: &'ref str = ::core::u32::MAX.to_str();
+    let n: &'local str = ::core::u32::MAX.to_str();
     dbg!(n);
     assert_eq!(n.parse(), Ok(::core::u32::MAX));
 
@@ -188,8 +188,8 @@ fn main ()
 // but the fact that it is achieved both without (heap) allocations and without
 // unsafe is ;)
 
-#[with]
-fn roman (mut n: u8) -> &'ref str
+#[with('local)]
+fn roman (mut n: u8) -> &'local str
 {
     if n == 0 {
         panic!("Vade retro!");
@@ -232,11 +232,11 @@ fn roman (mut n: u8) -> &'ref str
         .unwrap()
 }
 
-#[with]
+#[with('local)]
 fn romans ()
 {
     for n in 1 ..= ::core::u8::MAX {
-        let s: &'ref str = roman(n);
+        let s: &'local str = roman(n);
         println!("{:3} = {}", n, s);
     }
 }
