@@ -2,7 +2,7 @@
 
 include!("../prelude.rs");
 
-/// Renaming the `'ref` lifetime to something else
+/// Renaming the `'local` lifetime to something else
 const _: () = {
     trait ToStr {
         #[with('local)]
@@ -33,21 +33,21 @@ const _: () = {
 };
 
 /// Manually hand-rolling the continuation
-#[with(continuation_name = ret)]
+#[with('local, continuation_name = ret)]
 fn inside_if_yadda_early_return (n: u32)
-  -> &'ref str
+  -> &'local str
 {
     use ::core::fmt::Display;
 
-    #[with]
-    fn returns_local (n: u32) -> &'ref dyn Display
+    #[with('local)]
+    fn returns_local (n: u32) -> &'local dyn Display
     {
         &format_args!("{:#x}", n)
     }
 
     if true {
         #[with] let _it: &dyn Display = returns_local(n);
-        let it: &'ref dyn Display = returns_local(n);
+        let it: &'local dyn Display = returns_local(n);
         let s = it.to_string();
         return ret(&*s);
     } else {
@@ -65,11 +65,11 @@ fn foo ()
 }
 
 /// Recursive
-#[with(recursive = true)]
-fn rec (recurse: bool) -> &'ref ()
+#[with('local, recursive = true)]
+fn rec (recurse: bool) -> &'local ()
 {
     if recurse {
-        let _: &'ref _ = rec(false);
+        let _: &'local _ = rec(false);
     }
     &()
 }

@@ -6,12 +6,12 @@ struct Implementor;
 
 #[with]
 impl Implementor {
-    #[with(recursive = true)]
+    #[with('local, recursive = true)]
     fn recurse (&self, recurse: bool)
-      -> &'ref ()
+      -> &'local ()
     {
         if recurse {
-            let _: &'ref _ = self.recurse(false);
+            let _: &'local _ = self.recurse(false);
         }
         &()
     }
@@ -19,12 +19,12 @@ impl Implementor {
 
 #[with]
 trait Trait {
-    #[with(recursive = true)]
+    #[with('local, recursive = true)]
     fn recurse (&self, recurse: bool)
-      -> &'ref ()
+      -> &'local ()
     {
         if recurse {
-            let _: &'ref _ = self.recurse(false);
+            let _: &'local _ = self.recurse(false);
         }
         &()
     }

@@ -3,32 +3,32 @@ include!("../prelude.rs");
 struct Implementor;
 
 impl Implementor {
-    #[with(recursive = true)]
+    #[with('local, recursive = true)]
     fn foo (&self)
-      -> &'ref ()
+      -> &'local ()
     {
         &()
     }
 
-    #[with(recursive = true)]
+    #[with('local, recursive = true)]
     fn bar (self: &'_ Self)
-      -> &'ref ()
+      -> &'local ()
     {
         &()
     }
 }
 
 trait Trait {
-    #[with(recursive = true)]
+    #[with('local, recursive = true)]
     fn foo (&self)
-      -> &'ref ()
+      -> &'local ()
     {
         &()
     }
 
-    #[with(recursive = true)]
+    #[with('local, recursive = true)]
     fn bar (self: &'_ Self)
-      -> &'ref ()
+      -> &'local ()
     {
         &()
     }

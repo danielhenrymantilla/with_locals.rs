@@ -22,12 +22,12 @@ macro_rules! proc_macro_use {(
     let $krate = quote! {
         ::with_locals::__
     };
-    drop(&$krate);
+    let _ = (&$krate, );
     $(
         #[allow(nonstandard_style)]
         let $item = quote! {
             ::with_locals::__::$item
         };
-        drop(&$krate);
+        let _ = (&$krate, );
     )*
 )}

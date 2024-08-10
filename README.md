@@ -99,9 +99,10 @@ But that doesn't mean one cannot get sugar for it.
   - This can also be written as:
 
     ```rust,ignore
-    let one: &'ref _ = hex(1);
-    let two: &'ref _ = hex(2);
-    let three: &'ref _ = hex(3);
+    // in the scope of a `#[with('special)]`-annotated function.
+    let one: &'special _ = hex(1);
+    let two: &'special _ = hex(2);
+    let three: &'special _ = hex(3);
     ```
 
     That is, `let` bindings that feature a ["special lifetime"].
@@ -114,7 +115,7 @@ continuation.
 Here is an example:
 
 ```rust
-# use ::with_locals::with; #[with] fn hex (n: u32) -> &'ref dyn ::core::fmt::Display { &format_args!("{:#x}", n) }
+# use ::with_locals::with; #[with('local)] fn hex (n: u32) -> &'local dyn ::core::fmt::Display { &format_args!("{:#x}", n) }
 #
 #[with]
 fn hex_example ()
@@ -135,7 +136,7 @@ fn hex_example ()
 The above becomes:
 
 ```rust
-# use ::with_locals::with; #[with] fn hex (n: u32) -> &'ref dyn ::core::fmt::Display { &format_args!("{:#x}", n) }
+# use ::with_locals::with; #[with('local)] fn hex (n: u32) -> &'local dyn ::core::fmt::Display { &format_args!("{:#x}", n) }
 #
 fn hex_example ()
 {
@@ -169,7 +170,7 @@ trait ToStr {
 Example of an implementor:
 
 ```rust
-# use ::with_locals::with; trait ToStr { #[with] fn to_str (self: &'_ Self) -> &'ref str ; }
+# use ::with_locals::with; trait ToStr { #[with('local)] fn to_str (self: &'_ Self) -> &'local str ; }
 #
 impl ToStr for u32 {
     #[with('local)]
@@ -196,10 +197,10 @@ impl ToStr for u32 {
         // );
     }
 }
-# #[with]
+# #[with('special)]
 # fn main ()
 # {
-#     let s: &'ref str = 42.to_str();
+#     let s: &'special str = 42.to_str();
 #     assert_eq!(s, "42");
 # }
 ```
@@ -207,18 +208,18 @@ impl ToStr for u32 {
 Example of a user of the trait (≠ an implementor).
 
 ```rust
-# use ::with_locals::with; trait ToStr { #[with] fn to_str (self: &'_ Self) -> &'ref str ; }
+# use ::with_locals::with; trait ToStr { #[with('local)] fn to_str (self: &'_ Self) -> &'local str ; }
 #
 impl<T : ToStr> ::core::fmt::Display for __<T> {
-    #[with] // you can #[with]-annotate classic function,
-            // in order to get the `let` assignment magic :)
+    #[with('special)] // you can #[with]-annotate classic function,
+                      // in order to get the `let` assignment magic :)
     fn fmt (self: &'_ Self, fmt: &'_ mut ::core::fmt::Formatter<'_>)
       -> ::core::fmt::Result
     {
         //      You can specify the
         //      special lifetime instead of applying `[with]`
-        //      vvvv
-        let s: &'ref str = self.0.to_str();
+        //      vvvvvvvv
+        let s: &'special str = self.0.to_str();
         fmt.write_str(s)
     }
 }
@@ -255,9 +256,6 @@ when (and where!) to work**:
     fn ...
     ```
 
-      - Note: if no override is provided, `#[with]` defaults to
-        `#[with('ref)]`.
-
  1. Then, the macro will inspect to see if **there is a ["special lifetime"]
     within the return type of the function**.
 
@@ -291,9 +289,12 @@ when (and where!) to work**:
 
 ### Remarks
 
-  - By default, the ["special lifetime"] is `'ref`. Indeed, since `ref` is a
+  - ~~By default, the ["special lifetime"] is `'ref`. Indeed, since `ref` is a
     Rust keyword, it is not a legal lifetime name, so it is impossible for it
-    to conflict with some real lifetime parameter equally named.
+    to conflict with some real lifetime parameter equally named.~~
+
+    EDIT: an update to Rust and `rustc` has made it so not even macros can use
+    such lifetime names. So `'ref` and the like are no longer legal.
 
   - But `#[with]` allows you to rename that lifetime to one of your liking, by
     providing it as the first parameter of the attribute (the one applied to
@@ -347,8 +348,8 @@ then, know that you can:
 use ::core::fmt::Display;
 use ::with_locals::with;
 
-#[with(continuation_name = return_)]
-fn display_addr (addr: usize) -> &'ref dyn Display
+#[with('local, continuation_name = return_)]
+fn display_addr (addr: usize) -> &'local dyn Display
 {
     if addr == 0 {
         return_!( &"NULL" );
@@ -358,8 +359,8 @@ fn display_addr (addr: usize) -> &'ref dyn Display
     })
 }
 // where
-#[with]
-fn hex (n: usize) -> &'ref dyn Display
+#[with('local)]
+fn hex (n: usize) -> &'local dyn Display
 {
     &format_args!("{:x}", n)
 }
@@ -376,8 +377,8 @@ statement (after it).
 use ::core::fmt::Display;
 use ::with_locals::with;
 
-#[with]
-fn hex (n: u32) -> &'ref dyn Display
+#[with('local)]
+fn hex (n: u32) -> &'local dyn Display
 {
     &format_args!("{:#x}", n)
 }
@@ -401,8 +402,8 @@ And yet, when using the `#[with] let` sugar the above pattern seems to work:
 use ::core::fmt::Display;
 use ::with_locals::with;
 
-#[with]
-fn hex (n: u32) -> &'ref dyn Display
+#[with('local)]
+fn hex (n: u32) -> &'local dyn Display
 {
     &format_args!("{:#x}", n)
 }
