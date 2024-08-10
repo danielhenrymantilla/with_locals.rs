@@ -177,7 +177,7 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "with_locals"
-version = "0.3.3-rc1"
+version = "0.3.3"
 dependencies = [
  "trybuild",
  "with_locals-proc_macros",
@@ -185,7 +185,7 @@ dependencies = [
 
 [[package]]
 name = "with_locals-proc_macros"
-version = "0.3.3-rc1"
+version = "0.3.3"
 dependencies = [
  "func_wrap",
  "proc-macro2",
