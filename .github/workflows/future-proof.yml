@@ -1,16 +1,13 @@
 name: Cron CI
 
 on:
-  push:
-    branches:
-      - master
   schedule:
     - cron: '0 8 * * 1,5'
 
 jobs:
-  # == TEST (No UI) == #
+  # == TEST (NO UI) == #
   test-no-ui:
-    name: (Check & Build &) Test (No UI)
+    name: Test (no UI)
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,28 +21,25 @@ jobs:
           - nightly
     steps:
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        id: toolchain
+        uses: dtolnay/rust-toolchain@master
         with:
-          profile: default
-          override: true
           toolchain: ${{ matrix.rust-toolchains }}
 
+      - name: Override toolchain
+        run: rustup override set ${{ steps.toolchain.outputs.name }}
+
       - name: Clone repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Cargo +nightly test (no UI)
         if: matrix.rust-toolchains == 'nightly'
-        uses: actions-rs/cargo@v1
         env:
           CI_SKIP_UI_TESTS: "1"
-        with:
-          command: test
-          args: --features nightly
+        run: cargo test --verbose --features nightly
 
       - name: Cargo test (no UI)
         if: matrix.rust-toolchains != 'nightly'
-        uses: actions-rs/cargo@v1
         env:
           CI_SKIP_UI_TESTS: "1"
-        with:
-          command: test
+        run: cargo test --verbose
